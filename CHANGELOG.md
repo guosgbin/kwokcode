@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-23
+
+### Added
+
+- Middleware 中间件系统，支持 around/before/after 钩子，model 和 tool 独立排序
+- ToolEventMiddleware，将工具事件发布从 ToolRunner 解耦为中间件
+
 ## [0.1.0] - 2026-08-22
 
 ### Added

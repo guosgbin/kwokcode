@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kwok.server.event.manager import EventBusManager
-from kwok.server.llm.model import ToolCall
+
+if TYPE_CHECKING:
+    from kwok.server.tools.runner import ToolRunner
 
 
 @dataclass
@@ -20,5 +21,6 @@ class LlmContext:
     reason: str | None = None
     tools: list[dict[str, object]] = field(default_factory=list)
 
-    tool_executor: Callable[[ToolCall, LlmContext], Awaitable[str]] | None = None
     text: str = ""
+
+    tool_runner: ToolRunner | None = None

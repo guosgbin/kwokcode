@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from kwok.config import get_config
@@ -20,6 +20,8 @@ from kwok.server.event.turn_log_writer_bus import TurnLogWriterBus
 from kwok.server.llm.llm_context import LlmContext
 from kwok.server.llm.model import StopReason, ToolCall
 from kwok.server.llm.provider.llm_provider import LlmProvider
+from kwok.server.middleware import get_middleware_chain
+from kwok.server.tools.runner import ToolRunner
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,6 @@ async def run(
         prompt: str,
         turn_id: str,
         tools: Sequence[dict[str, object]] = (),
-        tool_executor: Callable[[ToolCall, LlmContext], Awaitable[str]] | None = None,
 ) -> None:
     config = get_config()
     context = LlmContext(
@@ -39,8 +40,8 @@ async def run(
         bus=bus,
         max_steps=max(1, config.agent.max_steps),
         tools=list(tools),
-        tool_executor=tool_executor,
         messages=[{"role": "user", "content": prompt}],
+        tool_runner=ToolRunner(),
     )
 
     turnLogWriter = TurnLogWriterBus(turn_id=turn_id)
@@ -85,7 +86,9 @@ async def run_llm_loop(provider: LlmProvider, context: LlmContext) -> str:
             break
         context.step += 1
         await context.bus.publish(StepStartEvent(turn_id=context.turn_id, step_id=context.step))
-        resp = await provider.stream_chat(context)
+        resp = await get_middleware_chain().invoke_around_model(
+            context, lambda: provider.stream_chat(context),
+        )
         context.text += resp.text
         if resp.stop_reason is StopReason.FINISH:
             context.status, context.reason = "success", "stop"
@@ -118,7 +121,7 @@ async def run_llm_loop(provider: LlmProvider, context: LlmContext) -> str:
                 )
             )
             break
-        if context.tool_executor is None:
+        if context.tool_runner is None:
             context.status, context.reason = "failed", "tool_not_configured"
             await context.bus.publish(
                 StepFinishEvent(
@@ -136,7 +139,7 @@ async def run_llm_loop(provider: LlmProvider, context: LlmContext) -> str:
             }
         )
         for call in resp.tool_calls:
-            result = await context.tool_executor(call, context)
+            result = await context.tool_runner.execute(call, context)
             context.messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
             await context.bus.publish(
                 StepFinishEvent(

@@ -11,7 +11,7 @@ from kwok.protocol.messages import ChatAcceptedJsonRpcResp, ChatJsonRpcReq
 from kwok.server.event.manager import EventBusManager
 from kwok.server.llm import LlmProvider
 from kwok.server.llm.loop import run
-from kwok.server.tools import execute_tool, read_file_tool
+from kwok.server.tools import read_file_tool
 from kwok.util.id_generator import gen_turn_id
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,6 @@ class ChatHandler:
             run(
                 self._bus, provider, req.prompt, turn_id,
                 tools=[read_file_tool.schema],
-                tool_executor=execute_tool,
             )
         )
         self._tasks.add(task)

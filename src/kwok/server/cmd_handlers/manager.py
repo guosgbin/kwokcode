@@ -6,9 +6,6 @@ from typing import Any
 from kwok.net.requset_context import RequestContext
 from kwok.protocol.enums import Method
 from kwok.protocol.errors import UnknownMethodError
-from kwok.server.event.client_bus import ClientEventPush
-from kwok.server.event.manager import EventBusManager
-from kwok.server.llm import LlmProvider
 from kwok.server.cmd_handlers.chat import ChatHandler
 from kwok.server.cmd_handlers.events import (
     SubscribeHandler,
@@ -17,6 +14,9 @@ from kwok.server.cmd_handlers.events import (
 )
 from kwok.server.cmd_handlers.ping import PingHandler
 from kwok.server.cmd_handlers.version import VersionHandler
+from kwok.server.event.client_bus import ClientEventPush
+from kwok.server.event.manager import EventBusManager
+from kwok.server.llm import LlmProvider
 
 Handler = Callable[[Any, RequestContext | None], Awaitable[Any]]
 

@@ -8,10 +8,10 @@ import time
 from kwok.config import get_config
 from kwok.log import setup_logging
 from kwok.net.server import SocketServer
+from kwok.server.cmd_handlers import HandlerManager
 from kwok.server.event.client_bus import ClientEventPush
 from kwok.server.event.manager import EventBusManager
 from kwok.server.llm import LlmProvider, build_provider
-from kwok.server.cmd_handlers import HandlerManager
 
 logger = logging.getLogger(__name__)
 

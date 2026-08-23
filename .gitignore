@@ -20,6 +20,7 @@ build/
 # IDE
 .idea/
 .claude/
+.trae/
 
 # OS
 .DS_Store
