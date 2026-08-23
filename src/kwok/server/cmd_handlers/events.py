@@ -6,8 +6,7 @@ from pydantic import ValidationError
 
 from kwok.net.requset_context import RequestContext
 from kwok.protocol.errors import InvalidParamsError
-from kwok.protocol.messages import (
-    EventTypesResp,
+from kwok.protocol.rpc_model import (
     SubscribeReq,
     SubscribeResp,
     UnsubscribeReq,
@@ -50,14 +49,3 @@ class UnsubscribeHandler:
             raise InvalidParamsError(f"无效退订参数: {exc}") from exc
         self._bus.unsubscribe(ctx.connection_id, req.patterns)
         return UnsubscribeResp(patterns=req.patterns)
-
-
-class TypesHandler:
-
-    def __init__(self, bus: ClientEventPush) -> None:
-        self._bus = bus
-
-    async def __call__(
-            self, params: Any, ctx: RequestContext | None = None
-    ) -> EventTypesResp:
-        return EventTypesResp(types=self._bus.types())

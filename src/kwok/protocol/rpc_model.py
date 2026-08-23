@@ -1,24 +1,33 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
 from kwok.config import get_config
-
-from .enums import Method
 from .errors import ErrorObject
 from .topics import validate_pattern
 
 _PROMPT_MAX_LENGTH = get_config().llm.prompt_max_length
 
-_JSONRPC_VERSION: Literal["2.0"] = "2.0"
+_JSONRPC_VERSION = "2.0"
+
+
+class Method(StrEnum):
+    PING = "ping"
+    VERSION = "version"
+    PROMPT = "prompt"
+    EVENT_SUBSCRIBE = "event.subscribe"
+    EVENT_UNSUBSCRIBE = "event.unsubscribe"
+    SESSION_CREATE = "session.create"
+    SESSION_CLOSE = "session.close"
 
 
 class Request(BaseModel):
     jsonrpc: Literal["2.0"] = _JSONRPC_VERSION
     method: str
-    params: dict[str, Any] | list[Any] | None = None
+    params: Any = None
     id: int | str | None = None
 
 
@@ -60,8 +69,12 @@ def make_error(
     return ErrorResponse(error=ErrorObject(code=code, message=message, data=data), id=id)
 
 
-class PingJsonRpcReq(BaseModel):
-    pass
+class BaseRpcReq(BaseModel):
+    method: Method
+
+
+class PingJsonRpcReq(BaseRpcReq):
+    method: Method = Method.PING
 
 
 class PingJsonRpcResp(BaseModel):
@@ -71,8 +84,8 @@ class PingJsonRpcResp(BaseModel):
     received_at: str
 
 
-class VersionJsonRpcReq(BaseModel):
-    pass
+class VersionJsonRpcReq(BaseRpcReq):
+    method: Method = Method.VERSION
 
 
 class VersionJsonRpcResp(BaseModel):
@@ -80,7 +93,8 @@ class VersionJsonRpcResp(BaseModel):
     version: str
 
 
-class ChatJsonRpcReq(BaseModel):
+class PromptReq(BaseRpcReq):
+    method: Method = Method.PROMPT
     prompt: str
 
     @field_validator("prompt")
@@ -94,12 +108,13 @@ class ChatJsonRpcReq(BaseModel):
         return stripped
 
 
-class ChatAcceptedJsonRpcResp(BaseModel):
-    type: Literal["chat.accepted"] = "chat.accepted"
+class PromptResp(BaseModel):
+    type: Literal["prompt"] = "prompt"
     turn_id: str
 
 
-class SubscribeReq(BaseModel):
+class SubscribeReq(BaseRpcReq):
+    method: Method = Method.EVENT_SUBSCRIBE
     patterns: list[str]
 
     @field_validator("patterns")
@@ -118,7 +133,8 @@ class SubscribeResp(BaseModel):
     patterns: list[str]
 
 
-class UnsubscribeReq(BaseModel):
+class UnsubscribeReq(BaseRpcReq):
+    method: Method = Method.EVENT_UNSUBSCRIBE
     patterns: list[str]
 
     @field_validator("patterns")
@@ -132,41 +148,3 @@ class UnsubscribeReq(BaseModel):
 class UnsubscribeResp(BaseModel):
     type: Literal["unsubscribe"] = "unsubscribe"
     patterns: list[str]
-
-
-class EventTypesReq(BaseModel):
-    pass
-
-
-class EventTypesResp(BaseModel):
-    type: Literal["event.types"] = "event.types"
-    types: list[str]
-
-
-REQ_BODY_CLASSES: dict[Method, type[BaseModel]] = {
-    Method.PING: PingJsonRpcReq,
-    Method.VERSION: VersionJsonRpcReq,
-    Method.CHAT: ChatJsonRpcReq,
-    Method.EVENT_SUBSCRIBE: SubscribeReq,
-    Method.EVENT_UNSUBSCRIBE: UnsubscribeReq,
-    Method.EVENT_TYPES: EventTypesReq,
-}
-
-RespUnion = (
-        PingJsonRpcResp
-        | VersionJsonRpcResp
-        | ChatAcceptedJsonRpcResp
-        | SubscribeResp
-        | UnsubscribeResp
-        | EventTypesResp
-)
-RESP_ADAPTER: TypeAdapter[RespUnion] = TypeAdapter(RespUnion)
-
-
-def build_request(method: str, **kwargs: Any) -> BaseModel | None:
-    try:
-        name = Method(method)
-    except ValueError:
-        return None
-    req_cls = REQ_BODY_CLASSES.get(name)
-    return req_cls(**kwargs) if req_cls is not None else None

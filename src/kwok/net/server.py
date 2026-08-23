@@ -12,7 +12,7 @@ import kwok
 from kwok.protocol.enums import ErrorCode
 from kwok.protocol.errors import InvalidParamsError, LlmError, UnknownMethodError
 from kwok.protocol.events import ServerStatusEvent
-from kwok.protocol.messages import (
+from kwok.protocol.rpc_model import (
     ErrorResponse,
     EventFrame,
     Request,
@@ -22,10 +22,9 @@ from kwok.protocol.messages import (
 )
 from kwok.server.event.client_bus import ClientEventPush
 from kwok.server.event.manager import EventBusManager
-
-from ..server.cmd_handlers import HandlerManager
 from .base import NDJSONDecodeError, read_message, write_message
 from .requset_context import RequestContext
+from ..server.cmd_handlers import HandlerManager
 
 logger = logging.getLogger(__name__)
 

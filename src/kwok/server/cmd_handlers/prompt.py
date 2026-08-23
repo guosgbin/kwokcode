@@ -7,7 +7,7 @@ from typing import Any
 
 from kwok.net.requset_context import RequestContext
 from kwok.protocol.errors import LlmError
-from kwok.protocol.messages import ChatAcceptedJsonRpcResp, ChatJsonRpcReq
+from kwok.protocol.rpc_model import PromptReq, PromptResp
 from kwok.server.event.manager import EventBusManager
 from kwok.server.llm import LlmProvider
 from kwok.server.llm.loop import run
@@ -17,7 +17,7 @@ from kwok.util.id_generator import gen_turn_id
 logger = logging.getLogger(__name__)
 
 
-class ChatHandler:
+class PromptHandler:
 
     def __init__(
             self, bus: EventBusManager, get_provider: Callable[[], LlmProvider | None]
@@ -28,17 +28,17 @@ class ChatHandler:
 
     async def __call__(
             self, params: Any, ctx: RequestContext | None = None
-    ) -> ChatAcceptedJsonRpcResp:
-        req = ChatJsonRpcReq.model_validate({} if params is None else params)
+    ) -> PromptResp:
+        req = PromptReq.model_validate({} if params is None else params)
         provider = self._get_provider()
         if provider is None:
             raise LlmError(
                 "未配置 LLM 供应商：请在启动 kwok-server 的环境变量中设置 OPENAI_API_KEY"
             )
         if ctx is None:
-            raise LlmError("chat 需要请求上下文（connection_id）")
+            raise LlmError("prompt 需要请求上下文（connection_id）")
         if ctx.request_id is None:
-            raise LlmError("chat 需要请求 id（Notification 不支持流式会话）")
+            raise LlmError("prompt 需要请求 id（Notification 不支持流式会话）")
         turn_id = gen_turn_id()
         task = asyncio.create_task(
             run(
@@ -48,4 +48,4 @@ class ChatHandler:
         )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
-        return ChatAcceptedJsonRpcResp(turn_id=turn_id)
+        return PromptResp(turn_id=turn_id)

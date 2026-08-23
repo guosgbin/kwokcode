@@ -4,7 +4,7 @@ import argparse
 from collections.abc import Iterable
 
 from kwok.config import get_config
-from kwok.protocol.enums import Method
+from kwok.protocol.rpc_model import Method
 
 
 class _KwokParser(argparse.ArgumentParser):
@@ -28,7 +28,7 @@ class _KwokParser(argparse.ArgumentParser):
             if len(stripped) > max_length:
                 self.error(f"提示词过长（>{max_length} 字符）")
             ns.prompt = stripped
-            ns.method = Method.CHAT
+            ns.method = Method.PROMPT
             return
         if getattr(ns, "command", None) is None:
             self.error("必须提供子命令或 -p/--prompt")
@@ -46,11 +46,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     version = sub.add_parser("version", help="打印服务端版本号")
     version.set_defaults(method=Method.VERSION)
-
-    event_types = sub.add_parser(
-        "event-types", help="列出服务端已注册的事件类型（发布订阅主题，供 TUI 参考）"
-    )
-    event_types.set_defaults(method=Method.EVENT_TYPES)
 
     server = sub.add_parser(
         "server", help="管理 kwok-server 守护进程（start / stop / status / restart）"

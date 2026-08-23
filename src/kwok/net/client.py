@@ -9,25 +9,26 @@ from typing import Any
 from pydantic import ValidationError
 
 from kwok.config import get_config
-from kwok.protocol.enums import Method
 from kwok.protocol.errors import RpcConnectionError, RpcError
 from kwok.protocol.events import (
     EVENT_ADAPTER,
     LLMChunkEvent,
 )
-from kwok.protocol.messages import (
-    ChatAcceptedJsonRpcResp,
+from kwok.protocol.rpc_model import (
+    BaseRpcReq,
+    PromptResp,
     ErrorResponse,
     EventFrame,
     Request,
     Response,
     RpcFrame,
+    SubscribeReq,
     SubscribeResp,
+    UnsubscribeReq,
 )
 from kwok.protocol.topics import match
-
-from ..util.id_generator import gen_request_id
 from .base import read_message, write_message
+from ..util.id_generator import gen_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ class SocketClient:
 
             if self._stream_queue is not None and self._stream_turn_id is None:
                 try:
-                    ack = ChatAcceptedJsonRpcResp.model_validate(rpc.result)
+                    ack = PromptResp.model_validate(rpc.result)
                 except ValidationError:
                     pass
                 else:
@@ -130,12 +131,6 @@ class SocketClient:
         if self._stream_queue is not None and self._stream_turn_id is not None:
             if isinstance(event, LLMChunkEvent) and event.turn_id == self._stream_turn_id:
                 self._stream_queue.put_nowait(("chunk", event.delta))
-
-
-            elif isinstance(event, ChatErrorEvent) and event.turn_id == self._stream_turn_id:
-                self._stream_queue.put_nowait(
-                    ("error", RpcError(event.code, event.message))
-                )
 
         for pattern, queues in self._subs.items():
             if match(pattern, method):
@@ -184,14 +179,16 @@ class SocketClient:
             if not queues:
                 del self._subs[pattern]
 
-    async def call(self, method: str, params: Any = None) -> Any:
+    async def call(self, params: BaseRpcReq) -> Any:
 
         if self._closed or self._writer is None or self._reader is None:
             raise RpcConnectionError("客户端未连接")
+        raw = params.model_dump(mode="json", exclude={"method"})
+        method = params.method
         req_id = gen_request_id()
         future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
         self._pending[req_id] = future
-        request = Request(method=method, params=params, id=req_id)
+        request = Request(method=method, params=raw, id=req_id)
         try:
             await write_message(self._writer, RpcFrame(rpc=request))
         except (OSError, ConnectionError) as exc:
@@ -213,7 +210,7 @@ class SocketClient:
             self._subs.setdefault(pattern, []).append(queue)
         try:
             ack = SubscribeResp.model_validate(
-                await self.call(Method.EVENT_SUBSCRIBE, {"patterns": patterns})
+                await self.call(SubscribeReq(patterns=patterns))
             )
         except BaseException:
             self._remove_sub_queue(patterns, queue)
@@ -230,13 +227,13 @@ class SocketClient:
             finally:
                 self._remove_sub_queue(patterns, queue)
                 with contextlib.suppress(RpcError, RpcConnectionError):
-                    await self.call(Method.EVENT_UNSUBSCRIBE, {"patterns": patterns})
+                    await self.call(UnsubscribeReq(patterns=patterns))
 
         return ack.connection_id, _events()
 
     async def unsubscribe(self, patterns: list[str]) -> None:
 
-        await self.call(Method.EVENT_UNSUBSCRIBE, {"patterns": patterns})
+        await self.call(UnsubscribeReq(patterns=patterns))
 
     async def stream(self, method: str, params: Any = None) -> AsyncIterator[str]:
 
@@ -247,7 +244,7 @@ class SocketClient:
 
         try:
             SubscribeResp.model_validate(
-                await self.call(Method.EVENT_SUBSCRIBE, {"patterns": ["chat.*"]})
+                await self.call(SubscribeReq(patterns=["chat.*"]))
             )
         except ValidationError as exc:
             raise RpcConnectionError(f"订阅响应无法识别: {exc}") from exc
@@ -265,7 +262,7 @@ class SocketClient:
             raise RpcConnectionError(f"发送失败: {exc}") from exc
         try:
             try:
-                ack = ChatAcceptedJsonRpcResp.model_validate(
+                ack = PromptResp.model_validate(
                     await asyncio.wait_for(future, timeout=self._timeout)
                 )
                 self._stream_turn_id = ack.turn_id
@@ -293,7 +290,7 @@ class SocketClient:
             self._pending.pop(req_id, None)
             self._reset_stream_state()
             with contextlib.suppress(RpcError, RpcConnectionError):
-                await self.call(Method.EVENT_UNSUBSCRIBE, {"patterns": ["chat.*"]})
+                await self.call(UnsubscribeReq(patterns=["chat.*"]))
 
     def _reset_stream_state(self) -> None:
 

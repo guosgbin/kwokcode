@@ -16,15 +16,9 @@ class ClientEventPush:
 
     def __init__(self) -> None:
 
-        self._types: set[str] = set()
-
         self._patterns: dict[str, set[str]] = {}
 
         self._senders: dict[str, SendEvent] = {}
-
-    def register(self, event_type: str) -> None:
-
-        self._types.add(event_type)
 
     def attach(self, connection_id: str, sender: SendEvent) -> None:
 
@@ -49,10 +43,6 @@ class ClientEventPush:
         removed = [p for p in patterns if p in conn_patterns]
         conn_patterns.difference_update(patterns)
         return removed
-
-    def types(self) -> list[str]:
-
-        return sorted(self._types)
 
     async def publish(self, event: BaseEvent) -> None:
 

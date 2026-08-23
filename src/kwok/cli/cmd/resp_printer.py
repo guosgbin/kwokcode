@@ -1,10 +1,9 @@
 import time
 from typing import Any
 
-from kwok.protocol.messages import (
-    ChatAcceptedJsonRpcResp,
-    EventTypesResp,
+from kwok.protocol.rpc_model import (
     PingJsonRpcResp,
+    PromptResp,
     SubscribeResp,
     UnsubscribeResp,
     VersionJsonRpcResp,
@@ -24,12 +23,9 @@ def print_formatter(resp: Any, start_time: float | None = None) -> None:
         )
     elif isinstance(resp, VersionJsonRpcResp):
         print(resp.version)
-    elif isinstance(resp, ChatAcceptedJsonRpcResp):
+    elif isinstance(resp, PromptResp):
         print(resp)
     elif isinstance(resp, SubscribeResp):
         print(resp)
     elif isinstance(resp, UnsubscribeResp):
         print(resp)
-    elif isinstance(resp, EventTypesResp):
-        for eventType in resp.types:
-            print(eventType)

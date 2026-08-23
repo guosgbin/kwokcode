@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import kwok
 from kwok.net.requset_context import RequestContext
-from kwok.protocol.messages import PingJsonRpcReq, PingJsonRpcResp
+from kwok.protocol.rpc_model import PingJsonRpcReq, PingJsonRpcResp
 
 
 class PingHandler:

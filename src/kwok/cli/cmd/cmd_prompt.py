@@ -1,14 +1,20 @@
+from __future__ import annotations
+
 import asyncio
 import sys
 from typing import Any
 
-from kwok.cli.event_handlers.event_handlers import event_mgr
 from kwok.cli.cmd.resp_printer import print_formatter
+from kwok.cli.event_handlers.event_handlers import event_mgr
 from kwok.net.client import SocketClient
-from kwok.protocol.enums import Method
 from kwok.protocol.errors import RpcConnectionError, RpcError
 from kwok.protocol.events import EventType
-from kwok.protocol.messages import RESP_ADAPTER
+from kwok.protocol.rpc_model import (
+    PromptReq,
+    PromptResp,
+    SubscribeReq,
+    SubscribeResp,
+)
 
 
 async def run_prompt(prompt: str, port: int, timeout: float) -> int:
@@ -28,14 +34,15 @@ async def run_prompt(prompt: str, port: int, timeout: float) -> int:
         async with SocketClient(port=port, timeout=timeout) as client:
             client.on_event(on_event)
 
-            eventSubscribeResp = await client.call(
-                Method.EVENT_SUBSCRIBE, {"patterns": ["llm.*", "turn.*", "step.*", "tool.**"]}
+            eventSubscribeResp = SubscribeResp.model_validate(
+                await client.call(SubscribeReq(patterns=["llm.*", "turn.*", "step.*", "tool.**"]))
             )
-            print_formatter(RESP_ADAPTER.validate_python(eventSubscribeResp))
+            print_formatter(eventSubscribeResp)
             try:
-
-                chatResp = await client.call(Method.CHAT, {"prompt": prompt})
-                print_formatter(RESP_ADAPTER.validate_python(chatResp))
+                chatResp = PromptResp.model_validate(
+                    await client.call(PromptReq(prompt=prompt))
+                )
+                print_formatter(chatResp)
             except RpcError as exc:
                 print(f"错误（{exc.code}）：{exc.message}", file=sys.stderr)
                 return 1

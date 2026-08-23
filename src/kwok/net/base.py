@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from kwok.protocol.messages import MESSAGE_ADAPTER, Message
+from kwok.protocol.rpc_model import MESSAGE_ADAPTER, Message
 
 
 class NDJSONError(Exception):

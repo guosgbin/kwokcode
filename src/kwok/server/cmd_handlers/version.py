@@ -4,7 +4,7 @@ from typing import Any
 
 import kwok
 from kwok.net.requset_context import RequestContext
-from kwok.protocol.messages import VersionJsonRpcReq, VersionJsonRpcResp
+from kwok.protocol.rpc_model import VersionJsonRpcReq, VersionJsonRpcResp
 
 
 class VersionHandler:

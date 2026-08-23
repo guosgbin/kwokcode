@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
 
+from kwok.cli.arg_parser import build_parser
 from kwok.cli.cmd.cmd_base_rpc import run
 from kwok.cli.cmd.cmd_prompt import run_prompt
 from kwok.cli.cmd.cmd_server import run_server_action
 from kwok.config import get_config
-from kwok.cli.arg_parser import build_parser
 
 
 def main() -> None:
