@@ -36,7 +36,7 @@ class WriteProjectMemoryTool(Tool):
         禁止：会话临时信息、一次性临时草稿。
         
         强制流程：
-        1. 先调用 read_project_memory_idx 读取MEMORY.md记忆索引；
+        1. 如果是项目记忆相关的动作，先调用 read_project_memory_idx 读取MEMORY.md记忆索引；
         2. 根据索引判断有无相近主题记忆，有则调用 read_project_memory 读取原文档；
         3. 存在相近条目必须合并更新，禁止重复新建，冲突以最新事实为准；
         4. 使用简短概括标题作为文档名，便于检索；同类事实收敛到同一文档，避免大量碎片文件；
