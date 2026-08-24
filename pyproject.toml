@@ -7,11 +7,15 @@ dependencies = [
     "load-dotenv>=0.1.0",
     "openai>=1",
     "pydantic>=2",
+
+    "textual>=8.2.8",
 ]
 
 [project.scripts]
 kwok-server = "kwok.server.main:main"
 kwok-cli = "kwok.cli.main:main"
+kwok = "kwok.tui.main:main"
+kwok-tui = "kwok.tui.main:main"
 
 [dependency-groups]
 dev = [

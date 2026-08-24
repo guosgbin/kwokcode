@@ -25,7 +25,7 @@ from kwok.protocol.rpc_model import (
 from kwok.server.event import get_bus, get_client_push
 
 from ..server.cmd_handlers import EventHandlerManager
-from .base import NDJSONDecodeError, read_message, write_message
+from .base import FRAME_LIMIT, NDJSONDecodeError, read_message, write_message
 from .requset_context import RequestContext
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,9 @@ class SocketServer:
         if stop_event is None:
             stop_event = asyncio.Event()
 
-        self._server = await asyncio.start_server(self._handle_client, self._host, self._port)
+        self._server = await asyncio.start_server(
+            self._handle_client, self._host, self._port, limit=FRAME_LIMIT
+        )
         if self._server.sockets:
             bind: Any = self._server.sockets[0].getsockname()
         else:

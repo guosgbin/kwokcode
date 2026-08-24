@@ -62,6 +62,7 @@ class ToolCallStartEvent(BaseEvent):
     step_id: int
     tool_call_id: str
     name: str
+    arguments: str = ""
 
 
 class ToolCallFinishEvent(BaseEvent):

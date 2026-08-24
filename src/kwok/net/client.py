@@ -29,7 +29,7 @@ from kwok.protocol.rpc_model import (
 from kwok.protocol.topics import match
 
 from ..util.id_generator import gen_request_id
-from .base import read_message, write_message
+from .base import FRAME_LIMIT, read_message, write_message
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,8 @@ class SocketClient:
 
         try:
             reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self._host, self._port), timeout=self._timeout
+                asyncio.open_connection(self._host, self._port, limit=FRAME_LIMIT),
+                timeout=self._timeout,
             )
         except (OSError, TimeoutError) as exc:
             raise RpcConnectionError(

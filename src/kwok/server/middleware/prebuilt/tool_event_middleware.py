@@ -28,6 +28,7 @@ class ToolEventMiddleware(Middleware):
                 step_id=ctx.step,
                 tool_call_id=call.id,
                 name=call.name,
+                arguments=call.arguments,
             )
         )
         try:

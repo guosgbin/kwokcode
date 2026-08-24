@@ -13,6 +13,11 @@ class NDJSONError(Exception):
     pass
 
 
+# NDJSON 单帧大小上限：默认 asyncio.StreamReader 为 64KB，
+# 但工具结果（如 read_file 大文件）一帧可能远超此值，故提升到 16MB。
+FRAME_LIMIT = 16 * 1024 * 1024
+
+
 class NDJSONDecodeError(NDJSONError):
     pass
 
