@@ -17,26 +17,12 @@ if TYPE_CHECKING:
 
 async def tool_execute(call: ToolCall, ctx: LlmContext) -> str:
     async def _core() -> str:
-        tool = get_tool_registry().get(call.name)
-        if tool is None:
-            raise LlmError(f"未知工具：{call.name}")
-        try:
-            args = json.loads(call.arguments or "{}")
-        except json.JSONDecodeError as exc:
-            return f"工具参数解析失败：{exc}"
-        input_model = tool.input_model
-        if input_model is None:
-            return f"工具 {call.name} 缺少 input_model"
-        try:
-            validated = input_model.model_validate(args)
-        except Exception as exc:
-            return f"工具参数校验失败：{exc}"
-        result = await _run_with_governance(tool, validated.model_dump())
+        result = await _run_with_governance(call.resolved_tool, call.validated_args)
         if isinstance(result, str):
             return result
-        if tool.output_model is not None:
+        if call.resolved_tool.output_model is not None:
             try:
-                tool.output_model.model_validate(result)
+                call.resolved_tool.output_model.model_validate(result)
             except Exception as exc:
                 return f"工具输出不符合声明结构：{exc}"
         return json.dumps(result, ensure_ascii=False)

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from kwok.server.tools.tool import Tool
 
 
 class StopReason(StrEnum):
@@ -16,6 +19,10 @@ class ToolCall:
     id: str
     name: str
     arguments: str
+
+    # 运行时字段，由 tool_execute 在中间件链路中填充
+    resolved_tool: Tool | None = None
+    validated_args: dict[str, Any] | None = None
 
 
 @dataclass
