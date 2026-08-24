@@ -11,3 +11,7 @@ def gen_request_id() -> str:
 
 def gen_turn_id() -> str:
     return gen_request_id()
+
+
+def gen_session_id() -> str:
+    return gen_request_id()

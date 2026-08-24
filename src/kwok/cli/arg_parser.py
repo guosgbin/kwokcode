@@ -1,45 +1,20 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterable
 
-from kwok.config import get_config
 from kwok.protocol.rpc_model import Method
 
 
-class _KwokParser(argparse.ArgumentParser):
-
-    def parse_args(
-            self, args: Iterable[str] | None = None, namespace: argparse.Namespace | None = None
-    ) -> argparse.Namespace:
-        ns = super().parse_args(args, namespace)
-        self._validate(ns)
-        return ns
-
-    def _validate(self, ns: argparse.Namespace) -> None:
-        prompt_raw = getattr(ns, "prompt", None)
-        if prompt_raw is not None:
-            if getattr(ns, "command", None) is not None:
-                self.error("`-p/--prompt` 与子命令互斥，请二选一")
-            stripped = prompt_raw.strip()
-            if not stripped:
-                self.error("提示词不能为空")
-            max_length = get_config().llm.prompt_max_length
-            if len(stripped) > max_length:
-                self.error(f"提示词过长（>{max_length} 字符）")
-            ns.prompt = stripped
-            ns.method = Method.PROMPT
-            return
-        if getattr(ns, "command", None) is None:
-            self.error("必须提供子命令或 -p/--prompt")
-
-
 def build_parser() -> argparse.ArgumentParser:
-    parser = _KwokParser(prog="kwok-cli", description="KwokCode 命令行客户端")
-    parser.add_argument(
-        "-p", "--prompt", type=str, default=None, help="直接发起 chat：流式输出大模型回复"
-    )
-    sub = parser.add_subparsers(dest="command")
+    parser = argparse.ArgumentParser(prog="kwok", description="KwokCode 命令行客户端")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    prompt = sub.add_parser("prompt", help="直接发起 chat：流式输出大模型回复")
+    prompt.add_argument("prompt", type=str, help="提示词")
+    prompt.set_defaults(method=Method.PROMPT)
+
+    interactive = sub.add_parser("interactive", help="进入交互式会话模式")
+    interactive.set_defaults(method=Method.PROMPT)
 
     ping = sub.add_parser("ping", help="发送 ping 命令（返回服务端版本/运行信息）")
     ping.set_defaults(method=Method.PING)

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
@@ -22,9 +23,10 @@ from kwok.protocol.rpc_model import (
 )
 from kwok.server.event.client_bus import ClientEventPush
 from kwok.server.event.manager import EventBusManager
+
+from ..server.cmd_handlers import HandlerManager
 from .base import NDJSONDecodeError, read_message, write_message
 from .requset_context import RequestContext
-from ..server.cmd_handlers import HandlerManager
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +42,22 @@ class SocketServer:
             handlerManager: HandlerManager,
             bus: ClientEventPush | None = None,
             eventBus: EventBusManager | None = None,
+            on_disconnect: Callable[[str], None] | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._handlerManager = handlerManager
         self._bus = bus if bus is not None else ClientEventPush()
         self._eventBus = eventBus if eventBus is not None else EventBusManager()
+        self._on_disconnect = on_disconnect
         self._server: asyncio.Server | None = None
         self._conn_counter = 0
         self._writers: set[asyncio.StreamWriter] = set()
         self._start_time = time.monotonic()
 
     async def serve_forever(self, stop_event: asyncio.Event | None = None) -> None:
+        if stop_event is None:
+            stop_event = asyncio.Event()
 
         self._server = await asyncio.start_server(self._handle_client, self._host, self._port)
         if self._server.sockets:
@@ -125,13 +131,17 @@ class SocketServer:
 
                     response = await self._handle_request(message.rpc, ctx)
                     await write_message(writer, RpcFrame(rpc=response))
-                else:
+                elif isinstance(message, EventFrame):
                     logger.warning("忽略客户端发来的事件帧：%s", message.event)
+                else:
+                    logger.warning("忽略客户端发来的未知 RPC 帧")
         except asyncio.CancelledError:
             raise
         finally:
             self._writers.discard(writer)
             self._bus.detach(connection_id)
+            if self._on_disconnect is not None:
+                self._on_disconnect(connection_id)
             writer.close()
             await writer.wait_closed()
 
@@ -150,4 +160,4 @@ class SocketServer:
         except Exception as exc:
             logger.exception("handler 执行失败: %s", request.method)
             return make_error(ErrorCode.INVALID_REQUEST, f"handler error: {exc}", id=request.id)
-        return Response(result=result, id=request.id)
+        return Response(result=result, id=request.id if request.id is not None else "")

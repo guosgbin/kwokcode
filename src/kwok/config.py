@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from load_dotenv import load_dotenv
+from load_dotenv import load_dotenv  # type: ignore[import-untyped]
 
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 6456
@@ -13,6 +13,7 @@ _DEFAULT_LOG_LEVEL = "INFO"
 _DEFAULT_LOG_FILE = "~/.kwok/logs/core.log"
 _DEFAULT_LOG_FORMAT = "text"
 _DEFAULT_CONFIG_PATH = "~/.kwok/config.toml"
+_DEFAULT_PROJECTS_DIR = "~/.kwok/projects"
 
 _DEFAULT_MAX_STEPS = 20
 
@@ -47,12 +48,18 @@ class KwokConfig:
     host: str = _DEFAULT_HOST
     port: int = _DEFAULT_PORT
     timeout: float = _DEFAULT_TIMEOUT
+    projects_dir: str = _DEFAULT_PROJECTS_DIR
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     llm: LlmConfig = field(default_factory=LlmConfig)
 
 
 def _env_str(name: str, default: str) -> str:
+    value = os.getenv(name)
+    return value if value else default
+
+
+def _env_str_opt(name: str, default: str | None) -> str | None:
     value = os.getenv(name)
     return value if value else default
 
@@ -78,6 +85,7 @@ def _get_config_from_env(config: KwokConfig) -> None:
     config.host = _env_str("KWOK_HOST", config.host)
     config.port = _env_int("KWOK_SERVER_PORT", config.port)
     config.timeout = _env_float("KWOK_TIMEOUT", config.timeout)
+    config.projects_dir = _env_str("KWOK_PROJECTS_DIR", config.projects_dir)
 
     config.logging.level = _env_str("KWOK_LOG_LEVEL", config.logging.level)
     config.logging.file = _env_str("KWOK_LOG_FILE", config.logging.file)
@@ -88,5 +96,5 @@ def _get_config_from_env(config: KwokConfig) -> None:
     config.llm.timeout = _env_float("KWOK_LLM_TIMEOUT", config.llm.timeout)
     config.llm.prompt_max_length = _env_int("KWOK_PROMPT_MAX_LENGTH", config.llm.prompt_max_length)
     config.llm.model = _env_str("OPENAI_MODEL", config.llm.model)
-    config.llm.api_key = _env_str("OPENAI_API_KEY", config.llm.api_key)
-    config.llm.base_url = _env_str("OPENAI_BASE_URL", config.llm.base_url)
+    config.llm.api_key = _env_str_opt("OPENAI_API_KEY", config.llm.api_key)
+    config.llm.base_url = _env_str_opt("OPENAI_BASE_URL", config.llm.base_url)

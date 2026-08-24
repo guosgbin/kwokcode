@@ -14,7 +14,7 @@ DATE_FMT = "%Y-%m-%d %H:%M:%S"
 
 def setup_logging(
         level: str = "INFO",
-        log_file: str = None,
+        log_file: str | None = None,
         console: bool = True,
 ) -> None:
     root_logger = logging.getLogger()

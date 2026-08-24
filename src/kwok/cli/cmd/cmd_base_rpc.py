@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import time
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import ValidationError
@@ -18,7 +19,7 @@ from kwok.protocol.rpc_model import (
     VersionJsonRpcResp,
 )
 
-_REQ_MAP: dict[Method, type[BaseRpcReq]] = {
+_REQ_MAP: dict[Method, Callable[[], BaseRpcReq]] = {
     Method.PING: PingJsonRpcReq,
     Method.VERSION: VersionJsonRpcReq,
 }

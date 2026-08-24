@@ -6,12 +6,13 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
 from kwok.config import get_config
+
 from .errors import ErrorObject
 from .topics import validate_pattern
 
 _PROMPT_MAX_LENGTH = get_config().llm.prompt_max_length
 
-_JSONRPC_VERSION = "2.0"
+_JSONRPC_VERSION: Literal["2.0"] = "2.0"
 
 
 class Method(StrEnum):
@@ -96,6 +97,8 @@ class VersionJsonRpcResp(BaseModel):
 class PromptReq(BaseRpcReq):
     method: Method = Method.PROMPT
     prompt: str
+    session_id: str | None = None
+    cwd: str | None = None
 
     @field_validator("prompt")
     @classmethod
@@ -148,3 +151,25 @@ class UnsubscribeReq(BaseRpcReq):
 class UnsubscribeResp(BaseModel):
     type: Literal["unsubscribe"] = "unsubscribe"
     patterns: list[str]
+
+
+class SessionCreateReq(BaseRpcReq):
+    method: Method = Method.SESSION_CREATE
+    cwd: str
+    name: str | None = None
+
+
+class SessionCreateResp(BaseModel):
+    type: Literal["session.create"] = "session.create"
+    session_id: str
+    name: str
+
+
+class SessionCloseReq(BaseRpcReq):
+    method: Method = Method.SESSION_CLOSE
+    session_id: str
+
+
+class SessionCloseResp(BaseModel):
+    type: Literal["session.close"] = "session.close"
+    session_id: str

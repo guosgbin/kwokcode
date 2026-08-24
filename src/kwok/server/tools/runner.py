@@ -23,17 +23,20 @@ class ToolRunner:
 
     async def execute(self, call: ToolCall, ctx: LlmContext) -> str:
         async def _core() -> str:
-            tool = (
-                _REGISTRY.get(call.name)
-                if self._registry is None
-                else self._registry.get(call.name)
-            )
-            if tool is None:
-                raise LlmError(f"未知工具：{call.name}")
+            if self._registry is None:
+                tool = _REGISTRY.get(call.name)
+                if tool is None:
+                    raise LlmError(f"未知工具：{call.name}")
+                impl: ToolImpl = tool.execute
+            else:
+                registry_impl = self._registry.get(call.name)
+                if registry_impl is None:
+                    raise LlmError(f"未知工具：{call.name}")
+                impl = registry_impl
             try:
                 args = json.loads(call.arguments or "{}")
             except json.JSONDecodeError as exc:
                 return f"工具参数解析失败：{exc}"
-            return await asyncio.to_thread(tool.execute, args)
+            return await asyncio.to_thread(impl, args)
 
         return await get_middleware_chain().invoke_around_tool(ctx, call, _core)

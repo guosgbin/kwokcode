@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any
 
 from kwok.config import get_config
@@ -25,6 +26,8 @@ from kwok.server.tools.runner import ToolRunner
 
 logger = logging.getLogger(__name__)
 
+type MessageCallback = Callable[..., None]
+
 
 async def run(
         bus: EventBusManager,
@@ -32,54 +35,70 @@ async def run(
         prompt: str,
         turn_id: str,
         tools: Sequence[dict[str, object]] = (),
+        turns_dir: Path | None = None,
+        on_message: MessageCallback | None = None,
+        history: Sequence[dict[str, Any]] = (),
 ) -> None:
     config = get_config()
+    messages: list[dict[str, Any]] = [*history, {"role": "user", "content": prompt}]
     context = LlmContext(
         turn_id=turn_id,
         prompt=prompt,
         bus=bus,
         max_steps=max(1, config.agent.max_steps),
         tools=list(tools),
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         tool_runner=ToolRunner(),
     )
 
-    turnLogWriter = TurnLogWriterBus(turn_id=turn_id)
+    turnLogWriter = TurnLogWriterBus(turn_id=turn_id, base_dir=turns_dir)
     bus.subscribe(turnLogWriter.on_event)
 
-    await bus.publish(TurnStartEvent(turn_id=turn_id, prompt=prompt))
     error: TurnErrorEvent | None = None
     try:
-        await run_llm_loop(provider, context)
-    except asyncio.CancelledError:
-        raise
-    except LlmError as exc:
-        error = TurnErrorEvent(turn_id=turn_id, code=ErrorCode.LLM_ERROR, message=str(exc))
-    except Exception as exc:
-        logger.exception("chat 流式任务异常 turn_id=%s", turn_id)
-        error = TurnErrorEvent(
-            turn_id=turn_id, code=ErrorCode.INTERNAL_ERROR, message=f"handler error: {exc}"
-        )
-
-    if error is None and context.status == "failed":
-        if context.reason == "max_steps":
+        await bus.publish(TurnStartEvent(turn_id=turn_id, prompt=prompt))
+        try:
+            await run_llm_loop(provider, context, on_message=on_message)
+        except asyncio.CancelledError:
+            raise
+        except LlmError as exc:
+            error = TurnErrorEvent(turn_id=turn_id, code=ErrorCode.LLM_ERROR, message=str(exc))
+        except Exception as exc:
+            logger.exception("chat 流式任务异常 turn_id=%s", turn_id)
             error = TurnErrorEvent(
-                turn_id=turn_id, code=ErrorCode.LLM_ERROR, message="已达步数上限，循环终止"
+                turn_id=turn_id, code=ErrorCode.INTERNAL_ERROR, message=f"handler error: {exc}"
             )
-        elif context.reason == "tool_not_configured":
-            error = TurnErrorEvent(
-                turn_id=turn_id,
-                code=ErrorCode.LLM_ERROR,
-                message="模型请求调用工具，但未配置工具执行器",
-            )
-        else:
-            logger.warning("loop 终止未达成功 status=%s reason=%s", context.status, context.reason)
-    if error is not None:
-        await bus.publish(error)
-    await bus.publish(TurnFinishEvent(turn_id=turn_id, prompt=prompt))
+
+        if error is None and context.status == "failed":
+            if context.reason == "max_steps":
+                error = TurnErrorEvent(
+                    turn_id=turn_id, code=ErrorCode.LLM_ERROR, message="已达步数上限，循环终止"
+                )
+            elif context.reason == "tool_not_configured":
+                error = TurnErrorEvent(
+                    turn_id=turn_id,
+                    code=ErrorCode.LLM_ERROR,
+                    message="模型请求调用工具，但未配置工具执行器",
+                )
+            else:
+                logger.warning(
+                    "loop 终止未达成功 status=%s reason=%s", context.status, context.reason
+                )
+        if error is not None:
+            await bus.publish(error)
+        if error is None and context.status == "success" and on_message is not None:
+            on_message("assistant", content=context.text)
+        await bus.publish(TurnFinishEvent(turn_id=turn_id, prompt=prompt))
+    finally:
+        bus.unsubscribe(turnLogWriter.on_event)
+        turnLogWriter.close()
 
 
-async def run_llm_loop(provider: LlmProvider, context: LlmContext) -> str:
+async def run_llm_loop(
+        provider: LlmProvider,
+        context: LlmContext,
+        on_message: MessageCallback | None = None,
+) -> str:
     while context.status == "running":
         if context.step >= context.max_steps:
             context.status, context.reason = "failed", "max_steps"
@@ -138,9 +157,17 @@ async def run_llm_loop(provider: LlmProvider, context: LlmContext) -> str:
                 "tool_calls": [_as_tool_call_message(c) for c in resp.tool_calls],
             }
         )
+        if on_message is not None:
+            on_message(
+                "assistant",
+                content=resp.text,
+                tool_calls=[_as_tool_call_message(c) for c in resp.tool_calls],
+            )
         for call in resp.tool_calls:
             result = await context.tool_runner.execute(call, context)
             context.messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
+            if on_message is not None:
+                on_message("tool", tool_call_id=call.id, name=call.name, content=result)
             await context.bus.publish(
                 StepFinishEvent(
                     turn_id=context.turn_id,

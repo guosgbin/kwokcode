@@ -16,9 +16,9 @@ from kwok.protocol.events import (
 )
 from kwok.protocol.rpc_model import (
     BaseRpcReq,
-    PromptResp,
     ErrorResponse,
     EventFrame,
+    PromptResp,
     Request,
     Response,
     RpcFrame,
@@ -27,8 +27,9 @@ from kwok.protocol.rpc_model import (
     UnsubscribeReq,
 )
 from kwok.protocol.topics import match
-from .base import read_message, write_message
+
 from ..util.id_generator import gen_request_id
+from .base import read_message, write_message
 
 logger = logging.getLogger(__name__)
 
@@ -192,13 +193,16 @@ class SocketClient:
         try:
             await write_message(self._writer, RpcFrame(rpc=request))
         except (OSError, ConnectionError) as exc:
-            await self._pending.pop(req_id, None)
+            pending_future = self._pending.pop(req_id) if req_id in self._pending else None
+            if pending_future is not None:
+                pending_future.cancel()
             raise RpcConnectionError(f"发送失败: {exc}") from exc
         try:
-
             return await asyncio.wait_for(future, timeout=self._timeout)
         except TimeoutError:
-            await self._pending.pop(req_id, None)
+            pending_future = self._pending.pop(req_id) if req_id in self._pending else None
+            if pending_future is not None:
+                pending_future.cancel()
             raise RpcConnectionError(f"等待响应超时（{self._timeout}s）") from None
 
     async def subscribe(self, patterns: list[str]) -> tuple[str, AsyncIterator[Any]]:

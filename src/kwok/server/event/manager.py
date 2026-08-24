@@ -17,8 +17,13 @@ class EventBusManager:
     def subscribe(self, handler: EventHandler) -> None:
         self._subscribers.append(handler)
 
+    def unsubscribe(self, handler: EventHandler) -> None:
+        """退订事件处理函数（幂等，缺失时静默）。"""
+        if handler in self._subscribers:
+            self._subscribers.remove(handler)
+
     async def publish(self, event: BaseEvent) -> None:
-        for handler in self._subscribers:
+        for handler in list(self._subscribers):
             try:
                 await handler(event)
             except Exception:

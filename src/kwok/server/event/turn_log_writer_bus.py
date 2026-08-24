@@ -19,8 +19,10 @@ def _now_iso() -> str:
 
 class TurnLogWriterBus:
 
-    def __init__(self, turn_id: str) -> None:
-        self._path = TURNS_DIR / turn_id / "event.jsonl"
+    def __init__(self, turn_id: str, base_dir: Path | None = None) -> None:
+        self._turn_id = turn_id
+        base = base_dir if base_dir is not None else TURNS_DIR
+        self._path = base / turn_id / "event.jsonl"
         self._file: TextIO | None = None
 
     @property
@@ -30,6 +32,8 @@ class TurnLogWriterBus:
 
     async def on_event(self, event: BaseEvent) -> None:
 
+        if getattr(event, "turn_id", None) != self._turn_id:
+            return
         line = json.dumps({"ts": _now_iso(), **event.model_dump()}, ensure_ascii=False)
         file = self._ensure_open()
         file.write(line + "\n")

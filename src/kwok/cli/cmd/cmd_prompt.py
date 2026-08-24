@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from typing import Any
 
@@ -40,7 +41,7 @@ async def run_prompt(prompt: str, port: int, timeout: float) -> int:
             print_formatter(eventSubscribeResp)
             try:
                 chatResp = PromptResp.model_validate(
-                    await client.call(PromptReq(prompt=prompt))
+                    await client.call(PromptReq(prompt=prompt, cwd=os.getcwd()))
                 )
                 print_formatter(chatResp)
             except RpcError as exc:
