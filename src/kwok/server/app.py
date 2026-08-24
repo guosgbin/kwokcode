@@ -5,7 +5,7 @@ import logging
 import signal
 import time
 
-from kwok.config import get_config
+from kwok.config import init_config
 from kwok.log import init_logging
 from kwok.net.server import SocketServer
 from kwok.server.cmd_handlers import EventHandlerManager
@@ -20,13 +20,11 @@ logger = logging.getLogger(__name__)
 class KwokApp:
 
     def __init__(self, provider: LlmProvider | None = None) -> None:
-        self._event_handler_manager = None
-        self._sessions = None
         self._provider = provider
         self._start_time = time.monotonic()
 
     async def start(self) -> None:
-        config = get_config()
+        config = init_config()
         init_logging(level=config.logging.level, log_file=config.logging.file)
         init_event_system()
         self._provider = build_provider(config)

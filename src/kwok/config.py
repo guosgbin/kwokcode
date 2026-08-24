@@ -19,7 +19,6 @@ _DEFAULT_MAX_STEPS = 20
 
 _DEFAULT_LLM_MODEL: str = "gpt-4o-mini"
 _DEFAULT_LLM_TIMEOUT: float = 60.0
-_PROMPT_MAX_LENGTH: int = 4096
 
 
 @dataclass
@@ -40,7 +39,6 @@ class LlmConfig:
     api_key: str | None = None
     model: str = _DEFAULT_LLM_MODEL
     timeout: float = _DEFAULT_LLM_TIMEOUT
-    prompt_max_length: int = _PROMPT_MAX_LENGTH
 
 
 @dataclass
@@ -74,11 +72,32 @@ def _env_float(name: str, default: float) -> float:
     return float(raw) if raw else default
 
 
-def get_config() -> KwokConfig:
+_CONFIG: KwokConfig | None = None
+
+
+def init_config() -> KwokConfig:
+    """进程级配置快照：读 .env + 解析环境变量，只执行一次（幂等）。"""
+    global _CONFIG
+    if _CONFIG is not None:
+        return _CONFIG
     config = KwokConfig()
     load_dotenv(".env", override=False)
     _get_config_from_env(config)
+    _CONFIG = config
     return config
+
+
+def get_config() -> KwokConfig:
+    """取进程级配置快照（未初始化则抛错）。"""
+    if _CONFIG is None:
+        raise RuntimeError("配置未初始化：请先调用 init_config()")
+    return _CONFIG
+
+
+def reset_config() -> None:
+    """清空配置快照（测试隔离用）。"""
+    global _CONFIG
+    _CONFIG = None
 
 
 def _get_config_from_env(config: KwokConfig) -> None:
@@ -94,7 +113,6 @@ def _get_config_from_env(config: KwokConfig) -> None:
     config.agent.max_steps = _env_int("KWOK_MAX_STEPS", config.agent.max_steps)
 
     config.llm.timeout = _env_float("KWOK_LLM_TIMEOUT", config.llm.timeout)
-    config.llm.prompt_max_length = _env_int("KWOK_PROMPT_MAX_LENGTH", config.llm.prompt_max_length)
     config.llm.model = _env_str("OPENAI_MODEL", config.llm.model)
     config.llm.api_key = _env_str_opt("OPENAI_API_KEY", config.llm.api_key)
     config.llm.base_url = _env_str_opt("OPENAI_BASE_URL", config.llm.base_url)

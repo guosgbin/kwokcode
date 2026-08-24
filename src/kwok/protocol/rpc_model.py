@@ -5,12 +5,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
-from kwok.config import get_config
-
 from .errors import ErrorObject
 from .topics import validate_pattern
-
-_PROMPT_MAX_LENGTH = get_config().llm.prompt_max_length
 
 _JSONRPC_VERSION: Literal["2.0"] = "2.0"
 
@@ -106,8 +102,6 @@ class PromptReq(BaseRpcReq):
         stripped = value.strip()
         if not stripped:
             raise ValueError("提示词不能为空")
-        if len(stripped) > _PROMPT_MAX_LENGTH:
-            raise ValueError(f"提示词过长（>{_PROMPT_MAX_LENGTH} 字符）")
         return stripped
 
 
