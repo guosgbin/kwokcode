@@ -18,6 +18,7 @@ class Method(StrEnum):
     EVENT_SUBSCRIBE = "event.subscribe"
     EVENT_UNSUBSCRIBE = "event.unsubscribe"
     SESSION_CREATE = "session.create"
+    SESSION_PROMPT = "session.prompt"
     SESSION_CLOSE = "session.close"
 
 
@@ -90,19 +91,38 @@ class VersionJsonRpcResp(BaseModel):
     version: str
 
 
+def _validate_prompt(value: str) -> str:
+    """strip 并拒绝空提示词。"""
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("提示词不能为空")
+    return stripped
+
+
 class PromptReq(BaseRpcReq):
+    """one-shot 提交 prompt：无会话，临时建一个会话跑完即收。"""
+
     method: Method = Method.PROMPT
     prompt: str
-    session_id: str | None = None
-    cwd: str | None = None
+    cwd: str
 
     @field_validator("prompt")
     @classmethod
     def _strip_and_check(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("提示词不能为空")
-        return stripped
+        return _validate_prompt(value)
+
+
+class SessionPromptReq(BaseRpcReq):
+    """交互式会话内提交 prompt：必须携带已创建的 session_id。"""
+
+    method: Method = Method.SESSION_PROMPT
+    prompt: str
+    session_id: str
+
+    @field_validator("prompt")
+    @classmethod
+    def _strip_and_check(cls, value: str) -> str:
+        return _validate_prompt(value)
 
 
 class PromptResp(BaseModel):

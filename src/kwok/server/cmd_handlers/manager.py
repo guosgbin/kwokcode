@@ -11,7 +11,7 @@ from kwok.server.cmd_handlers.events import (
     UnsubscribeHandler,
 )
 from kwok.server.cmd_handlers.ping import PingHandler
-from kwok.server.cmd_handlers.prompt import PromptHandler
+from kwok.server.cmd_handlers.prompt import PromptHandler, SessionPromptHandler
 from kwok.server.cmd_handlers.session import (
     SessionCloseHandler,
     SessionCreateHandler,
@@ -35,6 +35,7 @@ class EventHandlerManager:
             Method.PING: PingHandler(get_start_time),
             Method.VERSION: VersionHandler(),
             Method.PROMPT: PromptHandler(get_provider, sessions),
+            Method.SESSION_PROMPT: SessionPromptHandler(get_provider, sessions),
             Method.EVENT_SUBSCRIBE: SubscribeHandler(),
             Method.EVENT_UNSUBSCRIBE: UnsubscribeHandler(),
             Method.SESSION_CREATE: SessionCreateHandler(sessions),

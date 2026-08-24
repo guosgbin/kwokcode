@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -12,13 +13,14 @@ from kwok import __version__
 from kwok.protocol.errors import LlmError
 from kwok.server.event import get_bus
 from kwok.server.llm.loop import run
+from kwok.server.llm.model import AssistantMessage, ToolResultMessage, UserMessage
 from kwok.server.llm.provider.llm_provider import LlmProvider
 from kwok.server.session.meta import NameSource, SessionKind, SessionMeta, SessionStatus
 from kwok.server.session.name import derive_name
 from kwok.server.session.store import SessionStore
 from kwok.server.session.transcript import records_to_messages
 from kwok.server.session.writer import SessionTranscriptWriter
-from kwok.util.id_generator import gen_session_id
+from kwok.util.id_generator import gen_session_id, gen_turn_id
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,7 @@ class SessionManager:
         self._tools = list(tools)
         self._version = version
         self._sessions: dict[str, Session] = {}
+        self._turn_tasks: set[asyncio.Task[None]] = set()
 
     def create(
         self,
@@ -144,37 +147,29 @@ class SessionManager:
         self._update_status(session, "busy")
         return session
 
+    def launch_turn(self, session_id: str, prompt: str, owner: str) -> str:
+        """begin_turn + 派生 turn_id + 后台执行 send_message，返回 turn_id（fire-and-forget）。"""
+        self.begin_turn(session_id, owner)
+        turn_id = gen_turn_id()
+        task = asyncio.create_task(self.send_message(session_id, prompt, turn_id))
+        self._turn_tasks.add(task)
+        task.add_done_callback(self._turn_tasks.discard)
+        return turn_id
+
     async def send_message(self, session_id: str, message: str, turn_id: str) -> None:
         """跑一轮完整 turn：读盘历史 → 写 user → 派生名 → LLM 循环 → 按 kind 收尾。"""
         session = self._sessions.get(session_id)
         if session is None:
             raise LlmError("会话不存在")
         history = self._history_messages(session)
-        session.transcript_writer.append(role="user", content=message, turn_id=turn_id)
+        session.transcript_writer.append(UserMessage(message), turn_id=turn_id)
         if session.meta.kind == "interactive" and session.meta.name == "":
             session.meta.name = derive_name(message, 30)
             session.meta.updatedAt = _now_ms()
             self._store.write_meta(session.dir, session.meta)
 
-        def on_message(role: str, **kwargs: object) -> None:
-            if role == "tool":
-                session.transcript_writer.append(
-                    role="tool",
-                    content=str(kwargs.get("content", "")),
-                    turn_id=turn_id,
-                    tool_call_id=str(kwargs["tool_call_id"]) if "tool_call_id" in kwargs else None,
-                    name=str(kwargs["name"]) if "name" in kwargs else None,
-                )
-            elif role == "assistant":
-                tool_calls = kwargs.get("tool_calls")
-                if not isinstance(tool_calls, list):
-                    tool_calls = None
-                session.transcript_writer.append(
-                    role="assistant",
-                    content=str(kwargs.get("content", "")),
-                    turn_id=turn_id,
-                    tool_calls=tool_calls,
-                )
+        def on_message(msg: AssistantMessage | ToolResultMessage) -> None:
+            session.transcript_writer.append(msg, turn_id=turn_id)
 
         try:
             provider = self._get_provider()

@@ -19,14 +19,14 @@ from kwok.protocol.events import (
 from kwok.server.event import get_bus
 from kwok.server.event.turn_log_writer_bus import TurnLogWriterBus
 from kwok.server.llm.llm_context import LlmContext
-from kwok.server.llm.model import StopReason, ToolCall
+from kwok.server.llm.model import AssistantMessage, StopReason, ToolCall, ToolResultMessage
 from kwok.server.llm.provider.llm_provider import LlmProvider
 from kwok.server.middleware import get_middleware_chain
 from kwok.server.tools.runner import ToolRunner
 
 logger = logging.getLogger(__name__)
 
-type MessageCallback = Callable[..., None]
+type MessageCallback = Callable[[AssistantMessage | ToolResultMessage], None]
 
 
 async def run(
@@ -87,7 +87,7 @@ async def run(
         if error is not None:
             await bus.publish(error)
         if error is None and context.status == "success" and on_message is not None:
-            on_message("assistant", content=context.text)
+            on_message(AssistantMessage(content=context.text))
         await bus.publish(TurnFinishEvent(turn_id=turn_id, prompt=prompt))
     finally:
         bus.unsubscribe(turnLogWriter.on_event)
@@ -159,15 +159,16 @@ async def run_llm_loop(
         )
         if on_message is not None:
             on_message(
-                "assistant",
-                content=resp.text,
-                tool_calls=[_as_tool_call_message(c) for c in resp.tool_calls],
+                AssistantMessage(
+                    content=resp.text,
+                    tool_calls=[_as_tool_call_message(c) for c in resp.tool_calls],
+                )
             )
         for call in resp.tool_calls:
             result = await context.tool_runner.execute(call, context)
             context.messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
             if on_message is not None:
-                on_message("tool", tool_call_id=call.id, name=call.name, content=result)
+                on_message(ToolResultMessage(tool_call_id=call.id, name=call.name, content=result))
             await context.bus.publish(
                 StepFinishEvent(
                     turn_id=context.turn_id,

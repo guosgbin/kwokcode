@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from kwok.server.llm.model import AssistantMessage, ToolResultMessage, UserMessage
+
 MessageRole = Literal["user", "assistant", "tool"]
 
 
@@ -18,6 +20,29 @@ class TranscriptRecord(BaseModel):
     tool_call_id: str | None = None
     name: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
+
+
+def message_to_record(
+        event: UserMessage | AssistantMessage | ToolResultMessage,
+        *,
+        turn_id: str,
+        ts: str,
+) -> TranscriptRecord:
+    """把消息对象转成 transcript 落盘记录（isinstance 分派角色）。"""
+    if isinstance(event, UserMessage):
+        return TranscriptRecord(ts=ts, turn_id=turn_id, role="user", content=event.content)
+    if isinstance(event, ToolResultMessage):
+        return TranscriptRecord(
+            ts=ts,
+            turn_id=turn_id,
+            role="tool",
+            content=event.content,
+            tool_call_id=event.tool_call_id,
+            name=event.name,
+        )
+    return TranscriptRecord(
+        ts=ts, turn_id=turn_id, role="assistant", content=event.content, tool_calls=event.tool_calls
+    )
 
 
 def records_to_messages(records: Sequence[TranscriptRecord]) -> list[dict[str, Any]]:

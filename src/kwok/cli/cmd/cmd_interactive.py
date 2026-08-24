@@ -10,9 +10,9 @@ from kwok.net.client import SocketClient
 from kwok.protocol.errors import RpcConnectionError, RpcError
 from kwok.protocol.events import BaseEvent, EventType
 from kwok.protocol.rpc_model import (
-    PromptReq,
     SessionCloseReq,
     SessionCreateReq,
+    SessionPromptReq,
     SubscribeReq,
 )
 
@@ -53,7 +53,7 @@ async def run_interactive(port: int, timeout: float) -> int:
 
                 turn_finished.clear()
                 try:
-                    await client.call(PromptReq(prompt=prompt, session_id=session_id))
+                    await client.call(SessionPromptReq(prompt=prompt, session_id=session_id))
                 except RpcError as exc:
                     print(f"\n错误（{exc.code}）：{exc.message}")
                     continue

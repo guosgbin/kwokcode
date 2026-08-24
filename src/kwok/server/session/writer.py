@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TextIO
 
 from pydantic import ValidationError
 
-from kwok.server.session.transcript import MessageRole, TranscriptRecord
+from kwok.server.llm.model import AssistantMessage, ToolResultMessage, UserMessage
+from kwok.server.session.transcript import TranscriptRecord, message_to_record
 
 logger = logging.getLogger(__name__)
 
@@ -30,25 +31,13 @@ class SessionTranscriptWriter:
         return self._path
 
     def append(
-        self,
-        *,
-        role: MessageRole,
-        content: str,
-        turn_id: str,
-        tool_call_id: str | None = None,
-        name: str | None = None,
-        tool_calls: list[dict[str, Any]] | None = None,
+            self,
+            event: UserMessage | AssistantMessage | ToolResultMessage,
+            *,
+            turn_id: str,
     ) -> None:
         """追加一条消息记录并 flush。"""
-        record = TranscriptRecord(
-            ts=_now_iso(),
-            turn_id=turn_id,
-            role=role,
-            content=content,
-            tool_call_id=tool_call_id,
-            name=name,
-            tool_calls=tool_calls,
-        )
+        record = message_to_record(event, turn_id=turn_id, ts=_now_iso())
         file = self._ensure_open()
         file.write(record.model_dump_json() + "\n")
         file.flush()
