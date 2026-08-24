@@ -180,6 +180,8 @@ class SessionManager:
                 turns_dir=session.dir / "turns",
                 on_message=on_message,
                 history=history,
+                cwd=session.meta.cwd,
+                session_store=self._store,
             )
         finally:
             if session.meta.kind == "one-shot":

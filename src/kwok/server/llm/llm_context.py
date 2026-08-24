@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from kwok.server.event import EventBusManager
-from kwok.server.tools.registry import get_tool_registry
 
 
 @dataclass
@@ -18,8 +17,6 @@ class LlmContext:
     status: str = "running"
     reason: str | None = None
     text: str = ""
+    tools: list[dict[str, object]] = field(default_factory=list)
+    cwd: str = ""
 
-    @property
-    def tools(self) -> list[dict[str, object]]:
-        """当前可执行工具的 OpenAI function schema 列表（锚定注册表单例，现算无快照）。"""
-        return get_tool_registry().schemas()

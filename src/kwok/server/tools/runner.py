@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from kwok.protocol.errors import LlmError
 from kwok.server.llm.model import ToolCall
 from kwok.server.middleware import get_middleware_chain
-from kwok.server.tools.registry import get_tool_registry
+from kwok.server.tools.registry import ToolRegistry
 from kwok.server.tools.tool import RetryStrategy, Tool, ToolError
 
 if TYPE_CHECKING:
@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 class ToolRunner:
     """工具执行治理器：fail-closed + 参数校验 + 超时/重试 + 输出/错误校验 + 中间件钩子。"""
 
-    def __init__(self) -> None:
-        self._registry = get_tool_registry()
+    def __init__(self, tool_registry: ToolRegistry) -> None:
+        self._registry = tool_registry
 
     async def execute(self, call: ToolCall, ctx: LlmContext) -> str:
         async def _core() -> str:
@@ -30,8 +30,11 @@ class ToolRunner:
                 args = json.loads(call.arguments or "{}")
             except json.JSONDecodeError as exc:
                 return f"工具参数解析失败：{exc}"
+            input_model = tool.input_model
+            if input_model is None:
+                return f"工具 {call.name} 缺少 input_model"
             try:
-                validated = tool.input_model.model_validate(args)
+                validated = input_model.model_validate(args)
             except Exception as exc:
                 return f"工具参数校验失败：{exc}"
             result = await self._run_with_governance(tool, validated.model_dump())

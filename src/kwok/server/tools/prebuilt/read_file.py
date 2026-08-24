@@ -20,21 +20,19 @@ class ReadFileResult(BaseModel):
     content: str
 
 
-def _read_file(args: dict[str, Any]) -> dict[str, Any]:
-    path = str(args["path"])
-    try:
-        with open(path, encoding="utf-8") as f:
-            content = f.read()
-    except OSError as exc:
-        raise ToolError({"error": f"read_file 失败：{exc}"}) from exc
-    return {"path": path, "content": content}
+class ReadFileTool(Tool):
+    """read_file：读取指定路径的本地文本文件内容并返回。"""
 
+    name = "read_file"
+    description = "读取指定路径的本地文本文件内容并返回。"
+    input_model = ReadFileParams
+    output_model = ReadFileResult
 
-read_file_tool = Tool(
-    name="read_file",
-    description="读取指定路径的本地文本文件内容并返回。",
-    input_model=ReadFileParams,
-    output_model=ReadFileResult,
-    execute=_read_file,
-)
-
+    def execute(self, args: dict[str, Any]) -> dict[str, Any]:
+        path = str(args["path"])
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+        except OSError as exc:
+            raise ToolError({"error": f"read_file 失败：{exc}"}) from exc
+        return {"path": path, "content": content}

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
-
-type ToolImpl = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 class PermissionLevel(StrEnum):
@@ -65,20 +63,16 @@ class ToolError(Exception):
         super().__init__(str(payload))
 
 
-@dataclass(frozen=True)
-class Tool:
-    """工具元数据 + 执行函数。parameters 由 input_model 派生，不存储。"""
-
-    name: str
-    description: str
-    input_model: type[BaseModel]
-    execute: ToolImpl
+class Tool(ABC):
+    name: str = ""
+    description: str = ""
+    input_model: type[BaseModel] | None = None
     strict: bool = True
     output_model: type[BaseModel] | None = None
     error_model: type[BaseModel] | None = None
     permission_level: PermissionLevel = PermissionLevel.ASK
     risk_level: RiskLevel = RiskLevel.READONLY
-    category: ToolCategory = field(default_factory=ToolCategory)
+    category: ToolCategory = ToolCategory()
     timeout: float | None = None
     all_timeout: float | None = None
     retry_policy: RetryStrategy | None = None
@@ -86,12 +80,13 @@ class Tool:
     @property
     def parameters(self) -> dict[str, Any]:
         """入参 JSON Schema：由 input_model 现算派生。"""
+        if self.input_model is None:
+            return {}
         return schema_from_pydantic(self.input_model)
 
     @property
     def schema(self) -> dict[str, object]:
         """OpenAI function schema：仅暴露 name/description/parameters(+strict)。"""
-
         params = dict(self.parameters)
         if self.strict:
             params.setdefault("additionalProperties", False)
@@ -103,6 +98,11 @@ class Tool:
         if self.strict:
             function["strict"] = True
         return {"type": "function", "function": function}
+
+    @abstractmethod
+    def execute(self, args: dict[str, Any]) -> dict[str, Any]:
+        """子工具执行入口（runner 在 to_thread 里调用）。"""
+        raise NotImplementedError
 
 
 def schema_from_pydantic(model: type[BaseModel]) -> dict[str, Any]:
