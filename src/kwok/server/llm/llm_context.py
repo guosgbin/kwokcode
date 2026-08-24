@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from kwok.server.event.manager import EventBusManager
+from kwok.server.event import EventBusManager
 
 if TYPE_CHECKING:
     from kwok.server.tools.runner import ToolRunner

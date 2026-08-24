@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from kwok.net.requset_context import RequestContext
 from kwok.protocol.errors import InvalidParamsError, LlmError
 from kwok.protocol.rpc_model import PromptReq, PromptResp
-from kwok.server.event.manager import EventBusManager
+from kwok.server.event import get_bus
 from kwok.server.llm import LlmProvider
 from kwok.server.session import SessionManager
 from kwok.util.id_generator import gen_turn_id
@@ -22,11 +22,10 @@ class PromptHandler:
 
     def __init__(
             self,
-            bus: EventBusManager,
             get_provider: Callable[[], LlmProvider | None],
             sessions: SessionManager,
     ) -> None:
-        self._bus = bus
+        self._bus = get_bus()
         self._get_provider = get_provider
         self._sessions = sessions
         self._tasks: set[asyncio.Task[None]] = set()

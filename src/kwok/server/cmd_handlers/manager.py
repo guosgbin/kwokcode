@@ -17,20 +17,16 @@ from kwok.server.cmd_handlers.session import (
     SessionCreateHandler,
 )
 from kwok.server.cmd_handlers.version import VersionHandler
-from kwok.server.event.client_bus import ClientEventPush
-from kwok.server.event.manager import EventBusManager
 from kwok.server.llm import LlmProvider
 from kwok.server.session import SessionManager
 
 Handler = Callable[[Any, RequestContext | None], Awaitable[Any]]
 
 
-class HandlerManager:
+class EventHandlerManager:
 
     def __init__(
             self,
-            event_bus: EventBusManager,
-            client_bus: ClientEventPush,
             get_start_time: Callable[[], float],
             get_provider: Callable[[], LlmProvider | None],
             sessions: SessionManager,
@@ -38,9 +34,9 @@ class HandlerManager:
         self._handlers: dict[str, Handler] = {
             Method.PING: PingHandler(get_start_time),
             Method.VERSION: VersionHandler(),
-            Method.PROMPT: PromptHandler(event_bus, get_provider, sessions),
-            Method.EVENT_SUBSCRIBE: SubscribeHandler(client_bus),
-            Method.EVENT_UNSUBSCRIBE: UnsubscribeHandler(client_bus),
+            Method.PROMPT: PromptHandler(get_provider, sessions),
+            Method.EVENT_SUBSCRIBE: SubscribeHandler(),
+            Method.EVENT_UNSUBSCRIBE: UnsubscribeHandler(),
             Method.SESSION_CREATE: SessionCreateHandler(sessions),
             Method.SESSION_CLOSE: SessionCloseHandler(sessions),
         }

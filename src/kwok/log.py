@@ -12,7 +12,7 @@ LOG_FMT = (
 DATE_FMT = "%Y-%m-%d %H:%M:%S"
 
 
-def setup_logging(
+def init_logging(
         level: str = "INFO",
         log_file: str | None = None,
         console: bool = True,

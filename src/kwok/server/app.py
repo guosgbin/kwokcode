@@ -6,11 +6,10 @@ import signal
 import time
 
 from kwok.config import get_config
-from kwok.log import setup_logging
+from kwok.log import init_logging
 from kwok.net.server import SocketServer
-from kwok.server.cmd_handlers import HandlerManager
-from kwok.server.event.client_bus import ClientEventPush
-from kwok.server.event.manager import EventBusManager
+from kwok.server.cmd_handlers import EventHandlerManager
+from kwok.server.event import init_event_system
 from kwok.server.llm import LlmProvider, build_provider
 from kwok.server.session import SessionManager, SessionStore
 from kwok.server.tools import read_file_tool
@@ -20,43 +19,33 @@ logger = logging.getLogger(__name__)
 
 class KwokApp:
 
-    def __init__(
-            self, provider: LlmProvider | None = None, bus: ClientEventPush | None = None
-    ) -> None:
-
-        self._eventBus = EventBusManager()
-        self._clientEventPush = bus if bus is not None else ClientEventPush()
+    def __init__(self, provider: LlmProvider | None = None) -> None:
+        self._event_handler_manager = None
+        self._sessions = None
         self._provider = provider
         self._start_time = time.monotonic()
+
+    async def start(self) -> None:
         config = get_config()
+        init_logging(level=config.logging.level, log_file=config.logging.file)
+        init_event_system()
+        self._provider = build_provider(config)
         self._sessions = SessionManager(
             store=SessionStore(config.projects_dir),
-            bus=self._eventBus,
             get_provider=lambda: self._provider,
             tools=[read_file_tool.schema],
         )
-        self._handler_manager = HandlerManager(
-            event_bus=self._eventBus,
-            client_bus=self._clientEventPush,
+        eventHandlerManager = EventHandlerManager(
             get_start_time=lambda: self._start_time,
             get_provider=lambda: self._provider,
             sessions=self._sessions,
         )
-
-    async def start(self) -> None:
-
-        config = get_config()
-        setup_logging(level=config.logging.level, log_file=config.logging.file)
-        self._provider = build_provider(config)
         self._sessions.scan_orphans()
-
-        self._eventBus.subscribe(self._clientEventPush.publish)
 
         stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
 
         def _request_stop() -> None:
-
             logger.info("收到退出信号，开始优雅停机")
             stop_event.set()
 
@@ -69,9 +58,7 @@ class KwokApp:
         socketServer = SocketServer(
             config.host,
             config.port,
-            self._handler_manager,
-            bus=self._clientEventPush,
-            eventBus=self._eventBus,
+            eventHandlerManager,
             on_disconnect=self._sessions.terminate_owned,
         )
         try:

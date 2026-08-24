@@ -16,7 +16,7 @@ from kwok.protocol.events import (
     TurnFinishEvent,
     TurnStartEvent,
 )
-from kwok.server.event.manager import EventBusManager
+from kwok.server.event import get_bus
 from kwok.server.event.turn_log_writer_bus import TurnLogWriterBus
 from kwok.server.llm.llm_context import LlmContext
 from kwok.server.llm.model import StopReason, ToolCall
@@ -30,7 +30,6 @@ type MessageCallback = Callable[..., None]
 
 
 async def run(
-        bus: EventBusManager,
         provider: LlmProvider,
         prompt: str,
         turn_id: str,
@@ -39,6 +38,7 @@ async def run(
         on_message: MessageCallback | None = None,
         history: Sequence[dict[str, Any]] = (),
 ) -> None:
+    bus = get_bus()
     config = get_config()
     messages: list[dict[str, Any]] = [*history, {"role": "user", "content": prompt}]
     context = LlmContext(

@@ -12,13 +12,13 @@ from kwok.protocol.rpc_model import (
     UnsubscribeReq,
     UnsubscribeResp,
 )
-from kwok.server.event.client_bus import ClientEventPush
+from kwok.server.event import get_client_push
 
 
 class SubscribeHandler:
 
-    def __init__(self, bus: ClientEventPush) -> None:
-        self._bus = bus
+    def __init__(self) -> None:
+        self._bus = get_client_push()
 
     async def __call__(
             self, params: Any, ctx: RequestContext | None = None
@@ -35,8 +35,8 @@ class SubscribeHandler:
 
 class UnsubscribeHandler:
 
-    def __init__(self, bus: ClientEventPush) -> None:
-        self._bus = bus
+    def __init__(self) -> None:
+        self._bus = get_client_push()
 
     async def __call__(
             self, params: Any, ctx: RequestContext | None = None

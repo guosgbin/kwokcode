@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Literal
@@ -21,10 +22,9 @@ from kwok.protocol.rpc_model import (
     RpcFrame,
     make_error,
 )
-from kwok.server.event.client_bus import ClientEventPush
-from kwok.server.event.manager import EventBusManager
+from kwok.server.event import get_bus, get_client_push
 
-from ..server.cmd_handlers import HandlerManager
+from ..server.cmd_handlers import EventHandlerManager
 from .base import NDJSONDecodeError, read_message, write_message
 from .requset_context import RequestContext
 
@@ -39,19 +39,16 @@ class SocketServer:
             self,
             host: str,
             port: int,
-            handlerManager: HandlerManager,
-            bus: ClientEventPush | None = None,
-            eventBus: EventBusManager | None = None,
+            handlerManager: EventHandlerManager,
             on_disconnect: Callable[[str], None] | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._handlerManager = handlerManager
-        self._bus = bus if bus is not None else ClientEventPush()
-        self._eventBus = eventBus if eventBus is not None else EventBusManager()
+        self._bus = get_client_push()
+        self._eventBus = get_bus()
         self._on_disconnect = on_disconnect
         self._server: asyncio.Server | None = None
-        self._conn_counter = 0
         self._writers: set[asyncio.StreamWriter] = set()
         self._start_time = time.monotonic()
 
@@ -105,8 +102,7 @@ class SocketServer:
         peer = writer.get_extra_info(_EXTRA_INFO_PEERNAME, "<unknown>")
         logger.debug("client connected: %s", peer)
 
-        self._conn_counter += 1
-        connection_id = str(self._conn_counter)
+        connection_id = str(uuid.uuid4())
         self._writers.add(writer)
 
         async def send_event(method: str, params: dict[str, Any]) -> None:

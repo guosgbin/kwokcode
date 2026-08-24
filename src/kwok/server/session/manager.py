@@ -10,7 +10,7 @@ from typing import Any
 
 from kwok import __version__
 from kwok.protocol.errors import LlmError
-from kwok.server.event.manager import EventBusManager
+from kwok.server.event import get_bus
 from kwok.server.llm.loop import run
 from kwok.server.llm.provider.llm_provider import LlmProvider
 from kwok.server.session.meta import NameSource, SessionKind, SessionMeta, SessionStatus
@@ -62,13 +62,12 @@ class SessionManager:
         self,
         *,
         store: SessionStore,
-        bus: EventBusManager,
         get_provider: Callable[[], LlmProvider | None],
         tools: Sequence[dict[str, object]] = (),
         version: str = __version__,
     ) -> None:
         self._store = store
-        self._bus = bus
+        self._bus = get_bus()
         self._get_provider = get_provider
         self._tools = list(tools)
         self._version = version
@@ -182,7 +181,6 @@ class SessionManager:
             if provider is None:
                 raise LlmError("provider 未初始化")
             await run(
-                self._bus,
                 provider,
                 message,
                 turn_id,
