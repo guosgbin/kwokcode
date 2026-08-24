@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING
 
 from kwok.server.tools.registry import ToolRegistry
 from kwok.server.tools.prebuilt.read_file import ReadFileTool
+from kwok.server.tools.prebuilt.read_project_memory import ReadProjectMemoryTool
+from kwok.server.tools.prebuilt.read_project_memory_idx import ReadProjectMemoryIdxTool
 from kwok.server.tools.prebuilt.write_project_memory import WriteProjectMemoryTool
 
 if TYPE_CHECKING:
@@ -20,6 +22,8 @@ def init_tool_registry(store: SessionStore | None = None) -> None:
     _registry = ToolRegistry()
     _registry.register(ReadFileTool())
     if store is not None:
+        _registry.register(ReadProjectMemoryIdxTool(store))
+        _registry.register(ReadProjectMemoryTool(store))
         _registry.register(WriteProjectMemoryTool(store))
 
 

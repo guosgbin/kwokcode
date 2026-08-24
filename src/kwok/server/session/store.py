@@ -58,6 +58,10 @@ class SessionStore:
         """项目记忆目录：<projects_dir>/<slug>/memory/。"""
         return self._projects_dir / encode_cwd_slug(cwd) / _MEMORY_DIRNAME
 
+    def memory_path(self, cwd: str, name: str) -> Path:
+        """指定记忆名的文件路径：<memory_dir>/<slug>.md。"""
+        return self.memory_dir(cwd) / f"{_slug_name(name)}.md"
+
     def write_memory(
         self,
         cwd: str,
@@ -67,7 +71,7 @@ class SessionStore:
         summary: str | None = None,
     ) -> Path:
         """写入/覆盖一条项目记忆：原子写 <name>.md，并在 MEMORY.md 里 upsert 索引行。"""
-        target = self.memory_dir(cwd) / f"{_slug_name(name)}.md"
+        target = self.memory_path(cwd, name)
         target.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_path = tempfile.mkstemp(dir=target.parent, prefix=".mem-", suffix=".tmp")
         try:
