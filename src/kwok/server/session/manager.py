@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -65,13 +65,11 @@ class SessionManager:
         *,
         store: SessionStore,
         get_provider: Callable[[], LlmProvider | None],
-        tools: Sequence[dict[str, object]] = (),
         version: str = __version__,
     ) -> None:
         self._store = store
         self._bus = get_bus()
         self._get_provider = get_provider
-        self._tools = list(tools)
         self._version = version
         self._sessions: dict[str, Session] = {}
         self._turn_tasks: set[asyncio.Task[None]] = set()
@@ -179,7 +177,6 @@ class SessionManager:
                 provider,
                 message,
                 turn_id,
-                tools=self._tools,
                 turns_dir=session.dir / "turns",
                 on_message=on_message,
                 history=history,

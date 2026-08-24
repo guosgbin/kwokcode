@@ -33,7 +33,6 @@ async def run(
         provider: LlmProvider,
         prompt: str,
         turn_id: str,
-        tools: Sequence[dict[str, object]] = (),
         turns_dir: Path | None = None,
         on_message: MessageCallback | None = None,
         history: Sequence[dict[str, Any]] = (),
@@ -46,9 +45,7 @@ async def run(
         prompt=prompt,
         bus=bus,
         max_steps=max(1, config.agent.max_steps),
-        tools=list(tools),
         messages=messages,
-        tool_runner=ToolRunner(),
     )
 
     turnLogWriter = TurnLogWriterBus(turn_id=turn_id, base_dir=turns_dir)
@@ -99,6 +96,7 @@ async def run_llm_loop(
         context: LlmContext,
         on_message: MessageCallback | None = None,
 ) -> str:
+    runner = ToolRunner()
     while context.status == "running":
         if context.step >= context.max_steps:
             context.status, context.reason = "failed", "max_steps"
@@ -140,16 +138,6 @@ async def run_llm_loop(
                 )
             )
             break
-        if context.tool_runner is None:
-            context.status, context.reason = "failed", "tool_not_configured"
-            await context.bus.publish(
-                StepFinishEvent(
-                    turn_id=context.turn_id,
-                    step_id=context.step,
-                    finish_reason=context.reason,
-                )
-            )
-            break
         context.messages.append(
             {
                 "role": "assistant",
@@ -165,7 +153,7 @@ async def run_llm_loop(
                 )
             )
         for call in resp.tool_calls:
-            result = await context.tool_runner.execute(call, context)
+            result = await runner.execute(call, context)
             context.messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
             if on_message is not None:
                 on_message(ToolResultMessage(tool_call_id=call.id, name=call.name, content=result))

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from kwok.server.event import EventBusManager
-
-if TYPE_CHECKING:
-    from kwok.server.tools.runner import ToolRunner
+from kwok.server.tools.registry import get_tool_registry
 
 
 @dataclass
@@ -19,8 +17,9 @@ class LlmContext:
     step: int = 0
     status: str = "running"
     reason: str | None = None
-    tools: list[dict[str, object]] = field(default_factory=list)
-
     text: str = ""
 
-    tool_runner: ToolRunner | None = None
+    @property
+    def tools(self) -> list[dict[str, object]]:
+        """当前可执行工具的 OpenAI function schema 列表（锚定注册表单例，现算无快照）。"""
+        return get_tool_registry().schemas()

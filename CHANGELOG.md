@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-24
+
+### Added
+
+- 新增会话管理与持久化
+- 新增交互式会话模式：`kwok-cli interactive`
+- 工具体系重构
+
+### Changed
+
+- 事件系统重构为集中式管理：进程级单例注册中心
+- 配置管理重构为进程级配置快照
+
 ## [0.2.0] - 2026-08-23
 
 ### Added
