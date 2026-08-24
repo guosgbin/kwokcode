@@ -13,6 +13,7 @@ from kwok import __version__
 from kwok.protocol.errors import LlmError
 from kwok.server.event import get_bus
 from kwok.server.llm.loop import run
+from kwok.server.tools.context import cwd_var
 from kwok.server.llm.model import AssistantMessage, ToolResultMessage, UserMessage
 from kwok.server.llm.provider.llm_provider import LlmProvider
 from kwok.server.session.meta import NameSource, SessionKind, SessionMeta, SessionStatus
@@ -173,16 +174,18 @@ class SessionManager:
             provider = self._get_provider()
             if provider is None:
                 raise LlmError("provider 未初始化")
-            await run(
-                provider,
-                message,
-                turn_id,
-                turns_dir=session.dir / "turns",
-                on_message=on_message,
-                history=history,
-                cwd=session.meta.cwd,
-                session_store=self._store,
-            )
+            token = cwd_var.set(session.meta.cwd)
+            try:
+                await run(
+                    provider,
+                    message,
+                    turn_id,
+                    turns_dir=session.dir / "turns",
+                    on_message=on_message,
+                    history=history,
+                )
+            finally:
+                cwd_var.reset(token)
         finally:
             if session.meta.kind == "one-shot":
                 self._terminate(session)

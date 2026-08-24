@@ -18,5 +18,4 @@ class LlmContext:
     reason: str | None = None
     text: str = ""
     tools: list[dict[str, object]] = field(default_factory=list)
-    cwd: str = ""
 

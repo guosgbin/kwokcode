@@ -22,11 +22,8 @@ from kwok.server.llm.llm_context import LlmContext
 from kwok.server.llm.model import AssistantMessage, StopReason, ToolCall, ToolResultMessage
 from kwok.server.llm.provider.llm_provider import LlmProvider
 from kwok.server.middleware import get_middleware_chain
-from kwok.server.tools.registry import ToolRegistry
-from kwok.server.tools.runner import ToolRunner
-
-if TYPE_CHECKING:
-    from kwok.server.session.store import SessionStore
+from kwok.server.tools import get_tool_registry
+from kwok.server.tools.runner import tool_execute
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +34,6 @@ async def run(
         provider: LlmProvider,
         prompt: str,
         turn_id: str,
-        cwd: str,
-        session_store: SessionStore,
         turns_dir: Path | None = None,
         on_message: MessageCallback | None = None,
         history: Sequence[dict[str, Any]] = (),
@@ -46,7 +41,6 @@ async def run(
     bus = get_bus()
     config = get_config()
     messages: list[dict[str, Any]] = [*history, {"role": "user", "content": prompt}]
-    tool_registry = ToolRegistry.build(session_store, cwd)
 
     context = LlmContext(
         turn_id=turn_id,
@@ -54,8 +48,7 @@ async def run(
         bus=bus,
         max_steps=max(1, config.agent.max_steps),
         messages=messages,
-        cwd=cwd,
-        tools=tool_registry.schemas()
+        tools=get_tool_registry().schemas()
     )
 
     turnLogWriter = TurnLogWriterBus(turn_id=turn_id, base_dir=turns_dir)
@@ -65,7 +58,7 @@ async def run(
     try:
         await bus.publish(TurnStartEvent(turn_id=turn_id, prompt=prompt))
         try:
-            await run_llm_loop(provider, context, tool_registry, on_message=on_message)
+            await run_llm_loop(provider, context, on_message=on_message)
         except asyncio.CancelledError:
             raise
         except LlmError as exc:
@@ -104,10 +97,8 @@ async def run(
 async def run_llm_loop(
         provider: LlmProvider,
         context: LlmContext,
-        tool_registry: ToolRegistry,
         on_message: MessageCallback | None = None,
 ) -> str:
-    runner = ToolRunner(tool_registry)
     while context.status == "running":
         if context.step >= context.max_steps:
             context.status, context.reason = "failed", "max_steps"
@@ -164,7 +155,7 @@ async def run_llm_loop(
                 )
             )
         for call in resp.tool_calls:
-            result = await runner.execute(call, context)
+            result = await tool_execute(call, context)
             context.messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
             if on_message is not None:
                 on_message(ToolResultMessage(tool_call_id=call.id, name=call.name, content=result))

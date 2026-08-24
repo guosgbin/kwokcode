@@ -1,14 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
-from kwok.server.tools.prebuilt.read_file import ReadFileTool
-from kwok.server.tools.prebuilt.write_project_memory import WriteProjectMemoryTool
-from kwok.server.tools.tool import PermissionLevel, ReadWrite, RiskLevel, Tool
-
-if TYPE_CHECKING:
-    from kwok.server.session.store import SessionStore
+from kwok.server.tools.tool import Tool
 
 
 class ToolRegistry:
@@ -37,15 +31,3 @@ class ToolRegistry:
         """导出 OpenAI function schema 列表；tools 为 None 时导出全部已注册工具。"""
         items = list(tools) if tools is not None else list(self._tools.values())
         return [t.schema for t in items]
-
-    def all(self) -> list[Tool]:
-        """全部已注册工具。"""
-        return list(self._tools.values())
-
-    @staticmethod
-    def build(store: SessionStore | None = None, cwd: str | None = None) -> ToolRegistry:
-        registry = ToolRegistry()
-        registry.register(ReadFileTool())
-        if store is not None and cwd is not None:
-            registry.register(WriteProjectMemoryTool(store, cwd))
-        return registry

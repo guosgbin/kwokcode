@@ -12,6 +12,7 @@ from kwok.server.cmd_handlers import EventHandlerManager
 from kwok.server.event import init_event_system
 from kwok.server.llm import LlmProvider, build_provider
 from kwok.server.session import SessionManager, SessionStore
+from kwok.server.tools import init_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,10 @@ class KwokApp:
         init_logging(level=config.logging.level, log_file=config.logging.file)
         init_event_system()
         self._provider = build_provider(config)
+        store = SessionStore(config.projects_dir)
+        init_tool_registry(store)
         self._sessions = SessionManager(
-            store=SessionStore(config.projects_dir),
+            store=store,
             get_provider=lambda: self._provider,
         )
         eventHandlerManager = EventHandlerManager(
