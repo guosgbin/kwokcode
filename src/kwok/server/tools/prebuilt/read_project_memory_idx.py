@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from kwok.server.tools.context import cwd_var
-from kwok.server.tools.tool import ReadWrite, RiskLevel, Tool, ToolCategory, ToolError
+from kwok.server.tools.tool import ReadWrite, RiskLevel, Tool, ToolCategory, ToolError, PermissionLevel
 
 if TYPE_CHECKING:
     from kwok.server.session.store import SessionStore
@@ -31,6 +31,7 @@ class ReadProjectMemoryIdxTool(Tool):
     description = "读取当前项目的记忆索引文件 MEMORY.md，返回所有已保存的记忆条目列表。"
     input_model = ReadProjectMemoryIdxParams
     output_model = ReadProjectMemoryIdxResult
+    permission_level: PermissionLevel = PermissionLevel.ASK
     category = ToolCategory(business_type="memory", read_write=ReadWrite.READ)
     risk_level = RiskLevel.READONLY
 

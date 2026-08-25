@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from kwok.config import get_config
 from kwok.protocol.enums import ErrorCode
@@ -37,6 +37,7 @@ async def run(
         turns_dir: Path | None = None,
         on_message: MessageCallback | None = None,
         history: Sequence[dict[str, Any]] = (),
+        session_id: str = "",
 ) -> None:
     bus = get_bus()
     config = get_config()
@@ -48,7 +49,8 @@ async def run(
         bus=bus,
         max_steps=max(1, config.agent.max_steps),
         messages=messages,
-        tools=get_tool_registry().schemas()
+        tools=get_tool_registry().schemas(),
+        session_id=session_id,
     )
 
     turnLogWriter = TurnLogWriterBus(turn_id=turn_id, base_dir=turns_dir)

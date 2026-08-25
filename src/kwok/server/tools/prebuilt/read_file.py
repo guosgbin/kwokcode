@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from kwok.server.tools.tool import Tool, ToolError
+from kwok.server.tools.tool import Tool, ToolError, PermissionLevel
 
 _MAX_READ_SIZE = 16 * 1024
 _MAX_FILE_SIZE = 64 * 1024
@@ -29,6 +29,8 @@ class ReadFileTool(Tool):
     description = "读取指定路径的本地文本文件内容并返回。支持 offset/limit 分页读取大文件。"
     input_model = ReadFileParams
     output_model = ReadFileResult
+    permission_level: PermissionLevel = PermissionLevel.ASK
+
 
     def execute(self, args: dict[str, Any]) -> dict[str, Any]:
         path = str(args["path"])
@@ -42,7 +44,10 @@ class ReadFileTool(Tool):
 
         if file_size > _MAX_FILE_SIZE:
             raise ToolError({
-                "error": f"文件 {path} 超过 {_MAX_FILE_SIZE/ 1024:.2f} KB 限制，请使用 Grep 工具搜索特定内容"
+                "error": (
+                    f"文件 {path} 超过 {_MAX_FILE_SIZE / 1024:.2f} KB 限制，"
+                    f"请使用 Grep 工具搜索特定内容"
+                )
             })
 
         try:
@@ -64,7 +69,10 @@ class ReadFileTool(Tool):
         if offset is not None and offset > total_lines:
             return {
                 "path": path,
-                "content": f"<OUT_OF_RANGE: 文件 {path} 共 {total_lines} 行，offset {offset} 超出范围>",
+                "content": (
+                    f"<OUT_OF_RANGE: 文件 {path} 共 {total_lines} 行，"
+                    f"offset {offset} 超出范围>"
+                ),
                 "total_lines": total_lines,
                 "is_partial": False,
             }
@@ -75,7 +83,10 @@ class ReadFileTool(Tool):
         for i in range(start, end):
             if len(lines[i].encode("utf-8")) > _MAX_READ_SIZE:
                 raise ToolError({
-                    "error": f"第 {i + 1} 行过长（超过 {_MAX_READ_SIZE / 1024:.2f} KB），建议使用 Grep 搜索特定内容"
+                    "error": (
+                        f"第 {i + 1} 行过长（超过 {_MAX_READ_SIZE / 1024:.2f} KB），"
+                        f"建议使用 Grep 搜索特定内容"
+                    )
                 })
 
         target_lines = lines[start:end]
@@ -85,7 +96,10 @@ class ReadFileTool(Tool):
 
         if is_explicit and content_bytes > _MAX_READ_SIZE:
             raise ToolError({
-                "error": f"指定范围超过 {_MAX_READ_SIZE / 1024:.2f} KB，请使用较小的 limit 或改用 Grep 搜索特定内容"
+                "error": (
+                    f"指定范围超过 {_MAX_READ_SIZE / 1024:.2f} KB，"
+                    f"请使用较小的 limit 或改用 Grep 搜索特定内容"
+                )
             })
 
         if not is_explicit and content_bytes > _MAX_READ_SIZE:

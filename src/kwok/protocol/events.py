@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, TypeAdapter
 
+from .enums import PermissionDecision
+
 
 class EventType(StrEnum):
     TURN_START = "turn.start"
@@ -18,6 +20,9 @@ class EventType(StrEnum):
     TOOL_CALL_FINISH = "tool.call.finish"
     CHAT_DONE = "chat.done"
     SERVER_STATUS = "server.status"
+    PERMISSION_REQUESTED = "permission.requested"
+    PERMISSION_GRANTED = "permission.granted"
+    PERMISSION_DENIED = "permission.denied"
 
 
 class BaseEvent(BaseModel):
@@ -104,6 +109,31 @@ class ServerStatusEvent(BaseEvent):
     received_at: str
 
 
+class PermissionRequestedEvent(BaseEvent):
+    type: Literal[EventType.PERMISSION_REQUESTED] = EventType.PERMISSION_REQUESTED
+    tool_use_id: str
+    session_id: str
+    tool_name: str
+    param_preview: str
+    timeout_s: float | None = None
+
+
+class PermissionGrantedEvent(BaseEvent):
+    type: Literal[EventType.PERMISSION_GRANTED] = EventType.PERMISSION_GRANTED
+    tool_use_id: str
+    session_id: str
+    tool_name: str
+    decision: PermissionDecision
+
+
+class PermissionDeniedEvent(BaseEvent):
+    type: Literal[EventType.PERMISSION_DENIED] = EventType.PERMISSION_DENIED
+    tool_use_id: str
+    session_id: str
+    tool_name: str
+    decision: PermissionDecision
+
+
 Event = (LLMChunkEvent
          | LLMUsageEvent
          | TurnErrorEvent
@@ -114,5 +144,8 @@ Event = (LLMChunkEvent
          | StepFinishEvent
          | ToolCallStartEvent
          | ToolCallFinishEvent
+         | PermissionRequestedEvent
+         | PermissionGrantedEvent
+         | PermissionDeniedEvent
          )
 EVENT_ADAPTER: TypeAdapter[Event] = TypeAdapter(Event)

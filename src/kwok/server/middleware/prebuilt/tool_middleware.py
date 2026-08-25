@@ -9,6 +9,8 @@ from kwok.protocol.events import ToolCallFinishEvent, ToolCallStartEvent
 from kwok.server.llm.llm_context import LlmContext
 from kwok.server.llm.model import ToolCall
 from kwok.server.middleware import Middleware
+from kwok.server.permissions import get_permission_manager
+from kwok.server.permissions.models import PermissionResult
 from kwok.server.tools import get_tool_registry
 
 logger = logging.getLogger(__name__)
@@ -69,7 +71,6 @@ class ToolParamCheckMiddleware(Middleware):
             call: ToolCall,
             next_call: Callable[[], Awaitable[str]],
     ) -> str:
-        logger.info(f"哈哈哈哈，工具调用：{call.name}")
         # 校验入参
         tool = get_tool_registry().get(call.name)
         if tool is None:
@@ -93,3 +94,25 @@ class ToolParamCheckMiddleware(Middleware):
         call.validated_args = validated.model_dump()
         result = await next_call()
         return result
+
+
+class PermissionMiddleware(Middleware):
+    """工具权限审批前置拦截：参数校验后、工具执行前调用 manager.check。
+
+    tool_order=10（在 ToolParamCheckMiddleware(5) 之后、core 之前）：
+    依赖参数校验中间件先填充 call.resolved_tool / validated_args（check 预决与摘要需要）。
+    granted → 放行到下一环；denied/timeout → 短路返回分类错误文本，不执行工具。
+    """
+
+    tool_order: int = 10
+
+    async def around_tool(
+            self,
+            ctx: LlmContext,
+            call: ToolCall,
+            next_call: Callable[[], Awaitable[str]],
+    ) -> str:
+        outcome = await get_permission_manager().check(call, ctx.session_id)
+        if outcome.result is PermissionResult.GRANTED:
+            return await next_call()
+        return outcome.to_tool_error_text()

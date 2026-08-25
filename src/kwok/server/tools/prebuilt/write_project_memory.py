@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from kwok.server.tools.context import cwd_var
-from kwok.server.tools.tool import ReadWrite, RiskLevel, Tool, ToolCategory, ToolError
+from kwok.server.tools.tool import ReadWrite, RiskLevel, Tool, ToolCategory, ToolError, PermissionLevel
 
 if TYPE_CHECKING:
     from kwok.server.session.store import SessionStore
@@ -46,6 +46,7 @@ class WriteProjectMemoryTool(Tool):
                    )
     input_model = WriteProjectMemoryParams
     output_model = WriteProjectMemoryResult
+    permission_level: PermissionLevel = PermissionLevel.ASK
     category = ToolCategory(business_type="memory", read_write=ReadWrite.WRITE)
     risk_level = RiskLevel.MEDIUM
 

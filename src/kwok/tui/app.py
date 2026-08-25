@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from collections.abc import Iterable
 
@@ -9,13 +10,32 @@ from textual.widget import Widget
 
 from kwok.config import get_config
 from kwok.protocol.errors import RpcConnectionError, RpcError
+from kwok.protocol.events import (
+    PermissionDeniedEvent,
+    PermissionGrantedEvent,
+    PermissionRequestedEvent,
+)
 from kwok.tui.client import TuiClient
-from kwok.tui.messages import ConnectionLost, ConnectResult, EventMessage, SubmitPrompt
+from kwok.tui.messages import (
+    ConnectionLost,
+    ConnectResult,
+    EventMessage,
+    PermissionSelected,
+    SubmitPrompt,
+)
 from kwok.tui.renderer import EventRenderer
 from kwok.tui.state import UiState
-from kwok.tui.widgets import InputPanel, PromptTextArea, StatusBar, Transcript
+from kwok.tui.widgets import (
+    InputPanel,
+    PermissionSelect,
+    PromptTextArea,
+    StatusBar,
+    Transcript,
+)
 
-_SUB_PATTERNS = ["turn.*", "step.*", "llm.*", "tool.**", "server.*"]
+_SUB_PATTERNS = ["turn.*", "step.*", "llm.*", "tool.**", "server.*", "permission.*"]
+
+logger = logging.getLogger(__name__)
 
 
 class KwokTuiApp(App[None]):
@@ -96,6 +116,8 @@ class KwokTuiApp(App[None]):
         self._client = TuiClient()
         self._renderer: EventRenderer | None = None
         self._shutting_down = False
+        # tool_use_id → 审批控件；granted/denied 或 respond 后卸载（幂等去重）
+        self._permission_widgets: dict[str, PermissionSelect] = {}
 
     def compose(self) -> Iterable[Widget]:
         yield Transcript(id="transcript")
@@ -162,10 +184,70 @@ class KwokTuiApp(App[None]):
         self._sync_input()
 
     async def on_event_message(self, message: EventMessage) -> None:
-        assert self._renderer is not None
-        await self._renderer.handle(message.event)
+        event = message.event
+        # Textual 8.x 会重抛消息处理器异常导致整个 TUI 闪退——这里兜底转成
+        # 会话内错误提示，保证任何单个事件处理异常都不至于击穿进程。
+        try:
+            if isinstance(event, PermissionRequestedEvent):
+                await self._mount_permission_select(event)
+            elif isinstance(event, PermissionGrantedEvent):
+                await self._finish_permission(
+                    event.tool_use_id, f"工具 {event.tool_name} 已批准（{event.decision}）"
+                )
+            elif isinstance(event, PermissionDeniedEvent):
+                await self._finish_permission(
+                    event.tool_use_id, f"工具 {event.tool_name} 已拒绝（{event.decision}）"
+                )
+            else:
+                assert self._renderer is not None
+                await self._renderer.handle(event)
+        except Exception as exc:
+            logger.exception("事件处理异常 event=%s", type(event).__name__)
+            self.query_one(Transcript).add_error(f"事件处理异常：{exc}")
         self._sync_status()
         self._sync_input()
+
+    # ---- 权限审批 ----
+
+    async def _mount_permission_select(self, event: PermissionRequestedEvent) -> None:
+        """挂载内联审批控件（幂等去重），聚焦后由数字键决策。"""
+        if event.tool_use_id in self._permission_widgets:
+            return
+        widget = PermissionSelect(
+            tool_use_id=event.tool_use_id,
+            tool_name=event.tool_name,
+            param_preview=event.param_preview,
+            timeout_s=event.timeout_s,
+        )
+        self._permission_widgets[event.tool_use_id] = widget
+        await self.mount(widget, before=self.query_one(InputPanel))
+        widget.focus()
+
+    async def _remove_permission_widget(self, tool_use_id: str) -> None:
+        widget = self._permission_widgets.pop(tool_use_id, None)
+        if widget is not None:
+            await widget.remove()
+
+    async def _finish_permission(self, tool_use_id: str, note: str) -> None:
+        await self._remove_permission_widget(tool_use_id)
+        self.query_one(Transcript).append_info(note)
+
+    async def on_permission_selected(self, message: PermissionSelected) -> None:
+        """用户按键决策：卸载控件并回传 permission.respond。
+
+        整个处理器兜底异常：卸载控件或回传 RPC 的任何异常都只落成会话内
+        错误提示，不向外抛（Textual 8.x 会把处理器异常重抛导致 TUI 闪退）。
+        """
+        try:
+            await self._remove_permission_widget(message.tool_use_id)
+            await self._client.send_permission_respond(
+                message.tool_use_id, message.decision
+            )
+        except (RpcError, RpcConnectionError) as exc:
+            self.query_one(Transcript).add_error(f"审批回传失败：{exc}")
+        except Exception as exc:
+            logger.exception("审批按键处理异常 tool_use_id=%s", message.tool_use_id)
+            self.query_one(Transcript).add_error(f"审批处理异常：{exc}")
 
     def on_submit_prompt(self, message: SubmitPrompt) -> None:
         if self.state.connection_status != "connected":

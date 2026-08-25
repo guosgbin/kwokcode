@@ -4,8 +4,10 @@ from collections.abc import AsyncIterator
 from typing import Any, cast
 
 from kwok.net.client import SocketClient
+from kwok.protocol.enums import PermissionDecision
 from kwok.protocol.events import BaseEvent
 from kwok.protocol.rpc_model import (
+    PermissionRespondReq,
     PromptResp,
     SessionCloseReq,
     SessionCreateReq,
@@ -51,6 +53,13 @@ class TuiClient:
 
     async def close_session(self, session_id: str) -> None:
         await self._client.call(SessionCloseReq(session_id=session_id))
+
+    async def send_permission_respond(
+            self, tool_use_id: str, decision: PermissionDecision
+    ) -> None:
+        await self._client.call(
+            PermissionRespondReq(tool_use_id=tool_use_id, decision=decision)
+        )
 
     async def close(self) -> None:
         await self._client.close()

@@ -13,7 +13,6 @@ from kwok import __version__
 from kwok.protocol.errors import LlmError
 from kwok.server.event import get_bus
 from kwok.server.llm.loop import run
-from kwok.server.tools.context import cwd_var
 from kwok.server.llm.model import AssistantMessage, ToolResultMessage, UserMessage
 from kwok.server.llm.provider.llm_provider import LlmProvider
 from kwok.server.session.meta import NameSource, SessionKind, SessionMeta, SessionStatus
@@ -21,6 +20,7 @@ from kwok.server.session.name import derive_name
 from kwok.server.session.store import SessionStore
 from kwok.server.session.transcript import records_to_messages
 from kwok.server.session.writer import SessionTranscriptWriter
+from kwok.server.tools.context import cwd_var
 from kwok.util.id_generator import gen_session_id, gen_turn_id
 
 logger = logging.getLogger(__name__)
@@ -183,6 +183,7 @@ class SessionManager:
                     turns_dir=session.dir / "turns",
                     on_message=on_message,
                     history=history,
+                    session_id=session.id,
                 )
             finally:
                 cwd_var.reset(token)
@@ -216,6 +217,14 @@ class SessionManager:
             if session.owner_connection_id == connection_id:
                 self._terminate(session)
                 session.transcript_writer.close()
+
+    def sessions_for_connection(self, connection_id: str) -> list[str]:
+        """返回该连接拥有的全部 session_id（on_disconnect 权限清理组合回调使用）。"""
+        return [
+            session_id
+            for session_id, session in self._sessions.items()
+            if session.owner_connection_id == connection_id
+        ]
 
     def scan_orphans(self) -> None:
         """回收孤儿会话：pid 非当前进程且不存活且非 terminated 的 meta 置 terminated。"""

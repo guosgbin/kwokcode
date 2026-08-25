@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from textual.message import Message
 
+from kwok.protocol.enums import PermissionDecision
 from kwok.protocol.events import BaseEvent
 
 
@@ -36,4 +37,13 @@ class ConnectionLost(Message):
 
     def __init__(self, error: str) -> None:
         self.error = error
+        super().__init__()
+
+
+class PermissionSelected(Message):
+    """PermissionSelect 用户按键决策：App 据此发送 permission.respond。"""
+
+    def __init__(self, tool_use_id: str, decision: PermissionDecision) -> None:
+        self.tool_use_id = tool_use_id
+        self.decision = decision
         super().__init__()

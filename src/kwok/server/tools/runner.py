@@ -5,10 +5,8 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
-from kwok.protocol.errors import LlmError
 from kwok.server.llm.model import ToolCall
 from kwok.server.middleware import get_middleware_chain
-from kwok.server.tools import get_tool_registry
 from kwok.server.tools.tool import RetryStrategy, Tool, ToolError
 
 if TYPE_CHECKING:
@@ -17,12 +15,17 @@ if TYPE_CHECKING:
 
 async def tool_execute(call: ToolCall, ctx: LlmContext) -> str:
     async def _core() -> str:
-        result = await _run_with_governance(call.resolved_tool, call.validated_args)
+        tool = call.resolved_tool
+        args = call.validated_args
+        # 参数校验中间件（ToolParamCheckMiddleware）保证执行前已填充这两个字段
+        assert tool is not None, "工具未解析（resolved_tool 缺失）"
+        assert args is not None, "工具参数未校验（validated_args 缺失）"
+        result = await _run_with_governance(tool, args)
         if isinstance(result, str):
             return result
-        if call.resolved_tool.output_model is not None:
+        if tool.output_model is not None:
             try:
-                call.resolved_tool.output_model.model_validate(result)
+                tool.output_model.model_validate(result)
             except Exception as exc:
                 return f"工具输出不符合声明结构：{exc}"
         return json.dumps(result, ensure_ascii=False)

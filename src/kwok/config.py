@@ -20,6 +20,8 @@ _DEFAULT_MAX_STEPS = 20
 _DEFAULT_LLM_MODEL: str = "gpt-4o-mini"
 _DEFAULT_LLM_TIMEOUT: float = 60.0
 
+_DEFAULT_PERMISSION_TIMEOUT_S: float = 60.0
+
 
 @dataclass
 class LoggingConfig:
@@ -42,6 +44,13 @@ class LlmConfig:
 
 
 @dataclass
+class PermissionConfig:
+    """权限审批配置：审批超时秒数，0 = 不超时（依赖断连清理兜底）。"""
+
+    timeout_s: float = _DEFAULT_PERMISSION_TIMEOUT_S
+
+
+@dataclass
 class KwokConfig:
     host: str = _DEFAULT_HOST
     port: int = _DEFAULT_PORT
@@ -50,6 +59,7 @@ class KwokConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     llm: LlmConfig = field(default_factory=LlmConfig)
+    permission: PermissionConfig = field(default_factory=PermissionConfig)
 
 
 def _env_str(name: str, default: str) -> str:
@@ -111,6 +121,10 @@ def _get_config_from_env(config: KwokConfig) -> None:
     config.logging.format = _env_str("KWOK_LOG_FORMAT", config.logging.format)
 
     config.agent.max_steps = _env_int("KWOK_MAX_STEPS", config.agent.max_steps)
+
+    config.permission.timeout_s = _env_float(
+        "KWOK_PERMISSION_TIMEOUT_S", config.permission.timeout_s
+    )
 
     config.llm.timeout = _env_float("KWOK_LLM_TIMEOUT", config.llm.timeout)
     config.llm.model = _env_str("OPENAI_MODEL", config.llm.model)

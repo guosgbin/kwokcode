@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
+from .enums import PermissionDecision
 from .errors import ErrorObject
 from .topics import validate_pattern
 
@@ -20,6 +21,7 @@ class Method(StrEnum):
     SESSION_CREATE = "session.create"
     SESSION_PROMPT = "session.prompt"
     SESSION_CLOSE = "session.close"
+    PERMISSION_RESPOND = "permission.respond"
 
 
 class Request(BaseModel):
@@ -187,3 +189,17 @@ class SessionCloseReq(BaseRpcReq):
 class SessionCloseResp(BaseModel):
     type: Literal["session.close"] = "session.close"
     session_id: str
+
+
+class PermissionRespondReq(BaseRpcReq):
+    """回传审批决策：tool_use_id + 交互决策（allow_once/session_allow/deny_once/session_deny）。"""
+
+    method: Method = Method.PERMISSION_RESPOND
+    tool_use_id: str
+    decision: PermissionDecision
+
+
+class PermissionRespondResp(BaseModel):
+    type: Literal["permission.respond"] = "permission.respond"
+    tool_use_id: str
+    decision: PermissionDecision

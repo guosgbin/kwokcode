@@ -112,23 +112,30 @@ class SocketServer:
             await write_message(writer, EventFrame(event=method, params=params))
 
         self._bus.attach(connection_id, send_event)
+        # 每条命令独立 task 执行（FR-008），写回按每连接锁串行化保证 NDJSON 帧原子（FR-009）
+        write_lock = asyncio.Lock()
+        tasks: set[asyncio.Task[None]] = set()
         try:
             while True:
                 try:
 
                     message = await read_message(reader)
                 except NDJSONDecodeError:
-                    await write_message(
-                        writer, RpcFrame(rpc=make_error(ErrorCode.PARSE_ERROR, "解析错误"))
-                    )
+                    async with write_lock:
+                        await write_message(
+                            writer, RpcFrame(rpc=make_error(ErrorCode.PARSE_ERROR, "解析错误"))
+                        )
                     continue
                 if message is None:
                     break
                 if isinstance(message, RpcFrame) and isinstance(message.rpc, Request):
                     ctx = RequestContext(request_id=message.rpc.id, connection_id=connection_id)
-
-                    response = await self._handle_request(message.rpc, ctx)
-                    await write_message(writer, RpcFrame(rpc=response))
+                    task = asyncio.create_task(
+                        self._run_request(message.rpc, ctx, writer, write_lock),
+                        name=f"req:{connection_id}:{message.rpc.id}",
+                    )
+                    tasks.add(task)
+                    task.add_done_callback(tasks.discard)
                 elif isinstance(message, EventFrame):
                     logger.warning("忽略客户端发来的事件帧：%s", message.event)
                 else:
@@ -136,12 +143,35 @@ class SocketServer:
         except asyncio.CancelledError:
             raise
         finally:
+            # 取消并收尾残留命令 task，避免写已关闭连接 / 遗留未决 task
+            for task in list(tasks):
+                task.cancel()
+            for task in list(tasks):
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             self._writers.discard(writer)
             self._bus.detach(connection_id)
             if self._on_disconnect is not None:
                 self._on_disconnect(connection_id)
             writer.close()
             await writer.wait_closed()
+
+    async def _run_request(
+            self,
+            request: Request,
+            ctx: RequestContext,
+            writer: asyncio.StreamWriter,
+            write_lock: asyncio.Lock,
+    ) -> None:
+        """独立 task 执行一条命令并把响应写回连接（写回持每连接锁，帧原子）。"""
+        try:
+            response = await self._handle_request(request, ctx)
+            async with write_lock:
+                await write_message(writer, RpcFrame(rpc=response))
+        except asyncio.CancelledError:
+            raise
+        except (ConnectionError, OSError):
+            logger.debug("响应写回失败（连接可能已断开）：%s", request.method)
 
     async def _handle_request(
             self, request: Request, ctx: RequestContext
