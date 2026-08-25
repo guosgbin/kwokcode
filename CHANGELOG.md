@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-08-25
+
+### Added
+
+- 支持 TUI 交互式命令行
+- 新增项目记忆工具：`read_project_memory` / `read_project_memory_idx`
+- 新增 Bash 工具，支持 shell 命令执行与超时管理
+- 新增 Write 工具，per-session 文件读取跟踪，未读文件禁止覆写
+- 新增 Edit 工具，精确字符串替换，支持 TUI 行号级 diff 渲染
+- 新增 Grep 工具（基于 ripgrep）与 Glob 工具（文件名模式查找）
+- 新增工具权限审批子系统，高危操作需用户批准，含审批缓存
+- 新增系统高危命令黑名单（权限层强制拒绝，附友好提示）
+- 项目记忆索引（MEMORY.md）自动注入 LLM system 消息
+
+### Changed
+
+- 工具执行链重构为中间件拦截，事件发布由 ToolRunner 解耦到中间件
+- 中间件链路重构，统一工具调用前后处理顺序
 
 ## [0.3.0] - 2026-08-24
 
