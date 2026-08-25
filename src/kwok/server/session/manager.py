@@ -24,6 +24,7 @@ from kwok.server.session.name import derive_name
 from kwok.server.session.store import SessionStore
 from kwok.server.session.transcript import messages_to_records, records_to_messages
 from kwok.server.session.writer import SessionTranscriptWriter
+from kwok.server.skill import SkillLoader
 from kwok.server.tools.context import cwd_var, read_files_var
 from kwok.util.id_generator import gen_session_id, gen_turn_id
 
@@ -162,6 +163,28 @@ class SessionManager:
         task.add_done_callback(self._turn_tasks.discard)
         return turn_id
 
+    def _resolve_skill(self, message: str, cwd: str) -> tuple[str, str, list[str] | None]:
+        """解析用户消息中的 skill 触发。
+
+        消息以 `/` 开头视为调用 skill：`/name args`。解析 skill、把用户实参替换进
+        `$ARGUMENTS` 占位符产出 skill_prompt，并返回工具白名单。非 skill 触发返回
+        (原消息, "", None)——即普通 run（base 提示词 + 全量工具）。
+
+        三个下传值：prompt（LLM 用户消息，保持原样利于 transcript 回显）、
+        skill_prompt（system 提示词覆盖段）、allowed_tools（工具白名单，None=不设限）。
+        """
+        if not message.startswith("/") or message.startswith("//"):
+            return message, "", None
+        rest = message[1:].lstrip()
+        name, _, args = rest.partition(" ")
+        args = args.strip()
+        skill = SkillLoader().resolve(name, cwd)
+        if skill is None:
+            raise LlmError(f"未找到技能：/{name}")
+        prompt = skill.system_prompt_template.replace("$ARGUMENTS", args or "（无参数）")
+        logger.info("skill 触发：/%s args=%r cwd=%s", name, args, cwd)
+        return message, prompt, skill.allowed_tools
+
     async def send_message(self, session_id: str, message: str, turn_id: str) -> None:
         """跑一轮完整 turn：读盘历史 → 写 user → 派生名 → LLM 循环 → 按 kind 收尾。"""
         session = self._sessions.get(session_id)
@@ -184,7 +207,9 @@ class SessionManager:
             token = cwd_var.set(session.meta.cwd)
             read_token = read_files_var.set(session.read_files)
             try:
-                global_ctx, project_ctx = load_global_and_project()
+                _, skill_prompt, allowed_tools = self._resolve_skill(
+                    message, session.meta.cwd
+                )
                 await run(
                     provider,
                     message,
@@ -194,8 +219,8 @@ class SessionManager:
                     history=history,
                     session_id=session.id,
                     project_memory_idx=self._store.read_memory_index(session.meta.cwd),
-                    global_ctx=global_ctx,
-                    project_ctx=project_ctx,
+                    skill_prompt=skill_prompt,
+                    allowed_tools=allowed_tools,
                     on_compact=lambda result: session.transcript_writer.rewrite(
                         messages_to_records(result.compacted_messages, turn_id=turn_id),
                         ts=result.ts,

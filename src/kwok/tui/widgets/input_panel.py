@@ -9,15 +9,16 @@ from textual.widget import Widget
 from textual.widgets import Rule, Static, TextArea
 
 from kwok.tui.messages import SubmitPrompt
-from kwok.tui.widgets.command_palette import COMMANDS, CommandPalette
+from kwok.tui.widgets.command_palette import CommandPalette
 
 
 class PromptTextArea(TextArea):
     """拦截 Enter（提交）/ Ctrl+J（换行），支持 ↑/↓ 浏览历史，并驱动斜杠命令弹层。
 
     TextArea 默认在内部 keymap 处理 Enter 为换行、↑/↓ 为移动游标，父级绑定无法抢先，
-    故子类化在 _on_key 层拦截。弹层可见时 ↑/↓/Tab/Esc 让位给命令补全，
-    Enter 则补全高亮命令并直接发送。
+    故子类化在 _on_key 层拦截。弹层可见时 ↑/↓/Tab/Esc 让位给命令补全；
+    Enter 仅把高亮命令补全进输入框（与 Tab/点击一致），再按一次才发送——
+    给用户在命令后补实参（如 `/review src/foo.py`）留出机会。
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -57,8 +58,9 @@ class PromptTextArea(TextArea):
             if palette is not None and palette.is_visible:
                 command = palette.highlighted_command()
                 if command is not None:
-                    # 高亮候选上按 Enter：补全该命令并直接发送
+                    # 高亮候选上按 Enter：仅补全命令，不发送——等待用户补实参后再 Enter
                     self.complete_command(command)
+                    return
             self._record_history()
             self.post_message(SubmitPrompt(self.text))
             return
@@ -83,21 +85,23 @@ class PromptTextArea(TextArea):
     # ---- 斜杠命令弹层 ----
 
     def _on_text_area_changed(self, message: TextArea.Changed) -> None:
-        """文本变化驱动弹层：以 "/" 开头显示并过滤，否则隐藏。
+        """文本变化驱动弹层：以 "/" 开头且首个词尚未是完整命令时显示并过滤，否则隐藏。
 
-        已输入完整命令（/compact 等）时隐藏，避免补全后弹层复现。
+        首个词命中完整命令名即隐藏——覆盖 "/review" 与 "/review src" 两种情形：
+        补全后弹层不随空格/实参复现，避免干扰后续输入；若弹层可见时按 Enter，
+        也不会误把已补的实参覆盖回裸命令。
         """
         palette = self._palette
         if palette is None:
             return
         text = self.text
         if text.startswith("/"):
-            if text.lower() in COMMANDS:
+            body = text[1:]
+            first = body.split()[0].lower() if body.split() else ""
+            if first in {name[1:].lower() for name in palette.all_commands}:
                 palette.hide()
                 return
-            body = text[1:]
-            prefix = body.split()[0].lower() if body.split() else ""
-            palette.show(prefix)
+            palette.show(first)
         else:
             palette.hide()
 

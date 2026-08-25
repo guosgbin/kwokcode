@@ -31,3 +31,15 @@ class ToolRegistry:
         """导出 OpenAI function schema 列表；tools 为 None 时导出全部已注册工具。"""
         items = list(tools) if tools is not None else list(self._tools.values())
         return [t.schema for t in items]
+
+    def allowed_tool_schemas(self, allowed_tools: list[str] | None) -> list[dict[str, object]]:
+        """按 skill 白名单解析工具 schema。
+
+        白名单为 None → 全量工具；非空 → 只暴露名单内已注册的工具（未命中名字安全忽略）。
+        """
+        if allowed_tools is None:
+            return self.schemas()
+        tools = [
+            t for name in allowed_tools if (t := self.get(name)) is not None
+        ]
+        return self.schemas(tools)

@@ -24,6 +24,7 @@ from kwok.server.event.turn_log_writer_bus import TurnLogWriterBus
 from kwok.server.llm.llm_context import LlmContext
 from kwok.server.llm.model import AssistantMessage, StopReason, ToolCall, ToolResultMessage
 from kwok.server.llm.provider.llm_provider import LlmProvider
+from kwok.server.memory import load_global_and_project
 from kwok.server.middleware import get_middleware_chain
 from kwok.server.tools import get_tool_registry
 from kwok.server.tools.runner import tool_execute
@@ -31,6 +32,9 @@ from kwok.server.tools.runner import tool_execute
 logger = logging.getLogger(__name__)
 
 type MessageCallback = Callable[[AssistantMessage | ToolResultMessage], None]
+
+
+
 
 
 async def run(
@@ -42,13 +46,15 @@ async def run(
         history: Sequence[dict[str, Any]] = (),
         session_id: str = "",
         project_memory_idx: str = "",
-        global_ctx: str = "",
-        project_ctx: str = "",
         on_compact: Callable[[CompactResult], None] | None = None,
+        skill_prompt: str = "",
+        allowed_tools: list[str] | None = None,
 ) -> None:
     bus = get_bus()
     config = get_config()
     messages: list[dict[str, Any]] = [*history, {"role": "user", "content": prompt}]
+
+    global_ctx, project_ctx = load_global_and_project()
 
     context = LlmContext(
         turn_id=turn_id,
@@ -56,11 +62,12 @@ async def run(
         bus=bus,
         max_steps=max(1, config.agent.max_steps),
         messages=messages,
-        tools=get_tool_registry().schemas(),
+        tools=get_tool_registry().allowed_tool_schemas(allowed_tools),
         session_id=session_id,
         project_memory_idx=project_memory_idx,
         global_ctx=global_ctx,
         project_ctx=project_ctx,
+        skill_prompt=skill_prompt,
         session_dir=str(turns_dir.parent) if turns_dir else "",
     )
 

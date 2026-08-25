@@ -18,6 +18,7 @@ from kwok.protocol.events import (
     PermissionGrantedEvent,
     PermissionRequestedEvent,
 )
+from kwok.server.skill import SkillLoader
 from kwok.tui.client import TuiClient
 from kwok.tui.messages import (
     ConnectionLost,
@@ -153,6 +154,13 @@ class KwokTuiApp(App[None]):
         self.title = "kwok-tui"
         self._renderer = EventRenderer(self.query_one(Transcript), self.state)
         self.query_one(InputPanel).bind_palette(self._palette)
+        try:
+            skills = SkillLoader().list_all_skills(os.getcwd())
+            self._palette.reset_extra(
+                {f"/{item['name']}": item["description"] for item in skills}
+            )
+        except Exception:
+            pass
         self.query_one(PromptTextArea).focus()
         self.run_worker(self._run_client(), name="tui-client", exclusive=True)
 
@@ -292,12 +300,13 @@ class KwokTuiApp(App[None]):
         if not prompt:
             return
         if prompt.startswith("/"):
-            # 命令与普通消息一致：先本地回显 + 清空输入框，再分发处理。
-            # 纯 UI 反馈，无需服务端事件——服务端结果已由 ContextCompactedEvent → ⚡ 横幅反映。
-            self.query_one(Transcript).append_user(prompt)
-            self.query_one(InputPanel).clear()
-            self._handle_command(prompt)
-            return
+            # 内建命令本地分发；非内建 `/xxx` 视为 skill 调用，落到下方普通 prompt 管道，
+            # 由服务端解析 /skill 并替换 $ARGUMENTS。
+            if prompt.strip().split(maxsplit=1)[0].lower() in COMMANDS:
+                self.query_one(Transcript).append_user(prompt)
+                self.query_one(InputPanel).clear()
+                self._handle_command(prompt)
+                return
         self.state.turn_count += 1
         self.query_one(Transcript).add_divider(f" 第 {self.state.turn_count} 轮 ")
         self.state.turn_in_flight = True

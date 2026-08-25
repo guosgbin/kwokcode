@@ -18,8 +18,6 @@ COMMANDS: dict[str, str] = {
 }
 
 _NONE_HINT = "无匹配命令"
-# 命令名列宽：用于把描述对齐成列（命令名全 ASCII，空格填充即可对齐）
-_NAME_WIDTH = max(len(name) for name in COMMANDS)
 
 
 class CommandPalette(Container):
@@ -60,6 +58,16 @@ class CommandPalette(Container):
         self.options_list = OptionList()
         self._matches: list[str] = []
         self._input: Widget | None = None
+        self._extra: dict[str, str] = {}
+
+    @property
+    def all_commands(self) -> dict[str, str]:
+        """内建命令 ∪ 动态 skill：弹层过滤与输入框隐藏判定共用。skill 后加不覆盖内建。"""
+        return {**self._extra, **COMMANDS}
+
+    def reset_extra(self, extra: dict[str, str]) -> None:
+        """设置动态命令（如 skill：`/name` → 描述）。"""
+        self._extra = dict(extra)
 
     def compose(self) -> Iterable[Widget]:
         yield self.options_list
@@ -81,17 +89,19 @@ class CommandPalette(Container):
 
     def _rebuild(self, prefix: str) -> None:
         # 命令名含前导 "/"，prefix 来自 "/" 之后的输入，故比较 name[1:]
-        matches = [name for name in COMMANDS if name[1:].startswith(prefix)]
+        all_cmds = self.all_commands
+        matches = [name for name in all_cmds if name[1:].startswith(prefix)]
         self._matches = matches
         self.options_list.clear_options()
         if not matches:
             self.options_list.add_option(Option(_NONE_HINT, disabled=True))
         else:
+            name_width = max(len(name) for name in all_cmds)
             # 行内显示描述：命令名列宽对齐；id 仍取命令名，保证
             # Tab 补全（_matches）与鼠标点选（option_id）拿到纯命令。
             self.options_list.add_options(
                 [
-                    Option(f"{name:<{_NAME_WIDTH}}  {COMMANDS[name]}", id=name)
+                    Option(f"{name:<{name_width}}  {all_cmds[name]}", id=name)
                     for name in matches
                 ]
             )

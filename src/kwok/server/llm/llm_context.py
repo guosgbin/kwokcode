@@ -45,6 +45,7 @@ class LlmContext:
     tools: list[dict[str, object]] = field(default_factory=list)
     session_id: str = ""
     system: str = ""
+    skill_prompt: str = ""
     project_memory_idx: str = ""
     global_ctx: str = ""
     project_ctx: str = ""
@@ -52,8 +53,12 @@ class LlmContext:
     context_pct: float = 0.0
 
     def system_prompt(self) -> str:
-        """返回当前 run 的 system prompt：base → Global → Project → 项目记忆索引，空小节跳过。"""
-        text = _BASE_SYSTEM_PROMPT
+        """返回当前 run 的 system prompt。
+
+        存在 `skill_prompt` 时以其替换 base；Global → Project → 项目记忆索引三层照常拼接，
+        空小节跳过——skill 提示词与记忆注入互不冲突。
+        """
+        text = self.skill_prompt.strip() or _BASE_SYSTEM_PROMPT
         if self.global_ctx.strip():
             text += "\n\n## Global Context\n" + self.global_ctx
         if self.project_ctx.strip():
