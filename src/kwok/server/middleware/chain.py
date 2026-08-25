@@ -57,10 +57,10 @@ class MiddlewareChain:
 
 
 def _init_middleware_chain(chain: MiddlewareChain) -> None:
-    from kwok.server.middleware.prebuilt.permission import PermissionMiddleware
     from kwok.server.middleware.prebuilt.tool_middleware import (
         ToolEventPushMiddleware,
         ToolParamCheckMiddleware,
+        PermissionMiddleware,
     )
 
     chain.add(ToolEventPushMiddleware())

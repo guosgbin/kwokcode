@@ -12,8 +12,13 @@ from kwok.protocol.events import (
 )
 from kwok.server.event import EventBusManager, get_bus
 from kwok.server.llm.model import ToolCall
+from kwok.server.permissions.blacklist import check_blacklist
 from kwok.server.permissions.cache import SessionDecisionCache
-from kwok.server.permissions.errors import PermissionDeniedError, PermissionTimeoutError
+from kwok.server.permissions.errors import (
+    PermissionBlacklistError,
+    PermissionDeniedError,
+    PermissionTimeoutError,
+)
 from kwok.server.permissions.models import PermissionOutcome, PermissionResult
 from kwok.server.tools.tool import PermissionLevel
 
@@ -35,8 +40,19 @@ class PermissionManager:
         self._cache = SessionDecisionCache()
 
     async def check(self, call: ToolCall, session_id: str) -> PermissionOutcome:
-        """检查权限：元数据预决 → 缓存命中 → 挂起审批并等待决策（阻塞式）。"""
+        """检查权限：黑名单强拒 → 元数据预决 → 缓存命中 → 挂起审批并等待决策（阻塞式）。"""
         level = self._level(call)
+
+        # 高危黑名单：第一优先强拒，不弹窗、不走缓存（防 user allow 绕过）
+        block = check_blacklist(call)
+        if block is not None:
+            return await self._decide(
+                PermissionDecision.AUTO_DENY,
+                call,
+                session_id,
+                error=PermissionBlacklistError(block.reason),
+            )
+
         if level is PermissionLevel.ALLOW:
             return await self._decide(PermissionDecision.AUTO_ALLOW, call, session_id)
         if level is PermissionLevel.DENY:
@@ -113,7 +129,12 @@ class PermissionManager:
         return await future
 
     async def _decide(
-        self, decision: PermissionDecision, call: ToolCall, session_id: str
+        self,
+        decision: PermissionDecision,
+        call: ToolCall,
+        session_id: str,
+        *,
+        error: PermissionDeniedError | PermissionTimeoutError | PermissionBlacklistError | None = None,
     ) -> PermissionOutcome:
         """按决策产出 outcome + 发布 granted/denied 事件；session_* 写本 session 缓存。"""
         if decision in (
@@ -147,7 +168,7 @@ class PermissionManager:
             return PermissionOutcome(
                 result=PermissionResult.TIMEOUT,
                 decision=decision,
-                error=PermissionTimeoutError(),
+                error=error or PermissionTimeoutError(),
             )
         await self._bus.publish(
             PermissionDeniedEvent(
@@ -160,7 +181,7 @@ class PermissionManager:
         return PermissionOutcome(
             result=PermissionResult.DENIED,
             decision=decision,
-            error=PermissionDeniedError(),
+            error=error or PermissionDeniedError(),
         )
 
     @staticmethod
