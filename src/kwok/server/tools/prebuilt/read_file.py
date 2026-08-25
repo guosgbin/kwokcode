@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from kwok.server.tools.context import read_files_var
 from kwok.server.tools.tool import Tool, ToolError, PermissionLevel
 
 _MAX_READ_SIZE = 16 * 1024
@@ -33,6 +34,11 @@ class ReadFileTool(Tool):
 
 
     def execute(self, args: dict[str, Any]) -> dict[str, Any]:
+        result = self._do_read(args)
+        self._mark_read(args["path"])
+        return result
+
+    def _do_read(self, args: dict[str, Any]) -> dict[str, Any]:
         path = str(args["path"])
         offset = args.get("offset")
         limit = args.get("limit")
@@ -132,6 +138,13 @@ class ReadFileTool(Tool):
             "total_lines": total_lines,
             "is_partial": False,
         }
+
+    @staticmethod
+    def _mark_read(path: str) -> None:
+        """把已成功读取的文件加入会话级已读集合（供 write 覆盖校验）。"""
+        read_set = read_files_var.get()
+        if read_set is not None:
+            read_set.add(os.path.realpath(path))
 
     @staticmethod
     def _format_lines(lines: list[str], start_line: int) -> str:

@@ -6,6 +6,7 @@ from kwok.server.tools.prebuilt.bash import BashTool
 from kwok.server.tools.prebuilt.read_file import ReadFileTool
 from kwok.server.tools.prebuilt.read_project_memory import ReadProjectMemoryTool
 from kwok.server.tools.prebuilt.read_project_memory_idx import ReadProjectMemoryIdxTool
+from kwok.server.tools.prebuilt.write import WriteTool
 from kwok.server.tools.prebuilt.write_project_memory import WriteProjectMemoryTool
 from kwok.server.tools.registry import ToolRegistry
 
@@ -23,6 +24,7 @@ def init_tool_registry(store: SessionStore | None = None) -> None:
     _registry = ToolRegistry()
     _registry.register(BashTool())
     _registry.register(ReadFileTool())
+    _registry.register(WriteTool())
     if store is not None:
         _registry.register(ReadProjectMemoryIdxTool(store))
         _registry.register(ReadProjectMemoryTool(store))

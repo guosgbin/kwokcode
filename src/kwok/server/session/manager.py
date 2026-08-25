@@ -5,7 +5,7 @@ import logging
 import os
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,7 @@ from kwok.server.session.name import derive_name
 from kwok.server.session.store import SessionStore
 from kwok.server.session.transcript import records_to_messages
 from kwok.server.session.writer import SessionTranscriptWriter
-from kwok.server.tools.context import cwd_var
+from kwok.server.tools.context import cwd_var, read_files_var
 from kwok.util.id_generator import gen_session_id, gen_turn_id
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ class Session:
     meta: SessionMeta
     transcript_writer: SessionTranscriptWriter
     dir: Path
+    read_files: set[str] = field(default_factory=set)
 
 
 class SessionManager:
@@ -175,6 +176,7 @@ class SessionManager:
             if provider is None:
                 raise LlmError("provider 未初始化")
             token = cwd_var.set(session.meta.cwd)
+            read_token = read_files_var.set(session.read_files)
             try:
                 await run(
                     provider,
@@ -187,6 +189,7 @@ class SessionManager:
                 )
             finally:
                 cwd_var.reset(token)
+                read_files_var.reset(read_token)
         finally:
             if session.meta.kind == "one-shot":
                 self._terminate(session)
