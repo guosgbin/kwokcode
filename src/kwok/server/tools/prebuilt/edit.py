@@ -28,6 +28,8 @@ class EditParams(BaseModel):
 class EditResult(BaseModel):
     path: str
     replaced: int
+    before: str
+    after: str
 
 
 class EditTool(Tool):
@@ -105,4 +107,9 @@ class EditTool(Tool):
 
         if read_set is not None:
             read_set.add(path)
-        return {"path": path, "replaced": count}
+        return {
+            "path": path,
+            "replaced": count,
+            "before": content,
+            "after": new_content,
+        }

@@ -8,6 +8,7 @@ from textual.containers import VerticalScroll
 from textual.widgets import Markdown, Static
 from textual.widgets.markdown import MarkdownStream
 
+from kwok.tui.diff_render import render_diff
 from kwok.tui.state import UiState
 from kwok.tui.widgets.welcome import build_welcome
 
@@ -137,11 +138,29 @@ class Transcript(VerticalScroll):
         if entry is None:
             return
         block, name, arguments = entry
+        display: str
+        if name == "edit":
+            display = self._render_edit_diff(result)
+        else:
+            display = f"[dim]{escape(_preview(result))}[/dim]"
         block.update(
             f"[{_COL_SUCCESS}]✓[/{_COL_SUCCESS}] [bold]{escape(name)}[/bold]"
-            f"({escape(arguments)})\n[dim]{escape(_preview(result))}[/dim]"
+            f"({escape(arguments)})\n{display}"
         )
         self.scroll_end(animate=False)
+
+    def _render_edit_diff(self, result: str) -> str:
+        """edit 结果：解析 before/after 渲染行级 diff；解析失败回退通用预览。"""
+        import json
+
+        try:
+            data = json.loads(result.strip())
+            diff = render_diff(data["before"], data["after"])
+        except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
+            return f"[dim]{escape(_preview(result))}[/dim]"
+        if not diff:
+            return "[dim]无改动[/dim]"
+        return f"[dim]{diff}[/dim]"
 
     # ---- 其他 ----
 
