@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO
@@ -57,6 +58,27 @@ class SessionTranscriptWriter:
                 except ValidationError:
                     logger.warning("transcript 行解析失败，跳过：%s", line[:80])
         return records
+
+    def rewrite(self, records: list[TranscriptRecord], *, ts: str) -> None:
+        """全量重写 transcript：关 append 句柄 → 备份原文件 → 写入新记录 → 重开句柄。
+
+        备份用纯时间戳命名 `<name>.jsonl.<ts>.bak`，与同次压缩的 `summary_<ts>.md`
+        共享同一 ts（纯时间戳方案）：每次压缩各自留档、互不覆盖，不再有固定的
+        `.jsonl.bak` 被反复覆盖。调用方必须提供 ts（压缩路径取 CompactResult.ts），
+        缺 ts 直接抛错，杜绝静默覆盖备份。
+        调用前提：无并发写（手动路径由 busy 校验 + 互斥锁保证，自动路径在 run 任务内串行）。
+        """
+        if not ts:
+            raise ValueError("rewrite 需提供备份时间戳 ts（压缩路径从 CompactResult.ts 取）")
+        if self._file is not None:
+            self._file.close()
+            self._file = None
+        if self._path.is_file():
+            os.replace(self._path, self._path.with_name(f"{self._path.name}.{ts}.bak"))
+        with self._path.open("w", encoding="utf-8") as file:
+            for record in records:
+                file.write(record.model_dump_json() + "\n")
+        self._ensure_open()
 
     def _ensure_open(self) -> TextIO:
         """懒开句柄（追加写）。"""

@@ -19,9 +19,15 @@ _DEFAULT_MAX_STEPS = 20
 
 _DEFAULT_LLM_MODEL: str = "gpt-4o-mini"
 _DEFAULT_LLM_TIMEOUT: float = 60.0
+_DEFAULT_MAX_TOKENS = 8192
 
 _DEFAULT_PERMISSION_TIMEOUT_S: float = 60.0
 
+_DEFAULT_TOOL_RESULT_LIMIT = 8000
+_DEFAULT_TOOL_RESULT_KEEP = 4000
+_DEFAULT_AUTO_THRESHOLD = 0.0
+_DEFAULT_KEEP_RECENT = 5
+_DEFAULT_CONTEXT_WINDOW = 128000
 
 @dataclass
 class LoggingConfig:
@@ -41,6 +47,18 @@ class LlmConfig:
     api_key: str | None = None
     model: str = _DEFAULT_LLM_MODEL
     timeout: float = _DEFAULT_LLM_TIMEOUT
+    max_tokens: int = _DEFAULT_MAX_TOKENS
+
+
+@dataclass
+class CompactionConfig:
+    """上下文压缩配置：L1 截断参数 + L5 自动压缩阈值/窗口 + context_pct 计算窗口。"""
+
+    tool_result_limit: int = _DEFAULT_TOOL_RESULT_LIMIT
+    tool_result_keep: int = _DEFAULT_TOOL_RESULT_KEEP
+    auto_threshold: float = _DEFAULT_AUTO_THRESHOLD
+    keep_recent: int = _DEFAULT_KEEP_RECENT
+    context_window: int = _DEFAULT_CONTEXT_WINDOW
 
 
 @dataclass
@@ -60,6 +78,7 @@ class KwokConfig:
     agent: AgentConfig = field(default_factory=AgentConfig)
     llm: LlmConfig = field(default_factory=LlmConfig)
     permission: PermissionConfig = field(default_factory=PermissionConfig)
+    compaction: CompactionConfig = field(default_factory=CompactionConfig)
 
 
 def _env_str(name: str, default: str) -> str:
@@ -130,3 +149,20 @@ def _get_config_from_env(config: KwokConfig) -> None:
     config.llm.model = _env_str("OPENAI_MODEL", config.llm.model)
     config.llm.api_key = _env_str_opt("OPENAI_API_KEY", config.llm.api_key)
     config.llm.base_url = _env_str_opt("OPENAI_BASE_URL", config.llm.base_url)
+    config.llm.max_tokens = _env_int("KWOK_LLM_MAX_TOKENS", config.llm.max_tokens)
+
+    config.compaction.tool_result_limit = _env_int(
+        "KWOK_COMPACTION_TOOL_RESULT_LIMIT", config.compaction.tool_result_limit
+    )
+    config.compaction.tool_result_keep = _env_int(
+        "KWOK_COMPACTION_TOOL_RESULT_KEEP", config.compaction.tool_result_keep
+    )
+    config.compaction.auto_threshold = _env_float(
+        "KWOK_COMPACTION_AUTO_THRESHOLD", config.compaction.auto_threshold
+    )
+    config.compaction.keep_recent = _env_int(
+        "KWOK_COMPACTION_KEEP_RECENT", config.compaction.keep_recent
+    )
+    config.compaction.context_window = _env_int(
+        "KWOK_COMPACTION_CONTEXT_WINDOW", config.compaction.context_window
+    )

@@ -10,12 +10,15 @@ from kwok.config import get_config
 from kwok.protocol.enums import ErrorCode
 from kwok.protocol.errors import LlmError
 from kwok.protocol.events import (
+    ContextCompactedEvent,
+    ContextCompactStartEvent,
     StepFinishEvent,
     StepStartEvent,
     TurnErrorEvent,
     TurnFinishEvent,
     TurnStartEvent,
 )
+from kwok.server.compact import Compactor, CompactResult
 from kwok.server.event import get_bus
 from kwok.server.event.turn_log_writer_bus import TurnLogWriterBus
 from kwok.server.llm.llm_context import LlmContext
@@ -39,6 +42,9 @@ async def run(
         history: Sequence[dict[str, Any]] = (),
         session_id: str = "",
         project_memory_idx: str = "",
+        global_ctx: str = "",
+        project_ctx: str = "",
+        on_compact: Callable[[CompactResult], None] | None = None,
 ) -> None:
     bus = get_bus()
     config = get_config()
@@ -53,6 +59,9 @@ async def run(
         tools=get_tool_registry().schemas(),
         session_id=session_id,
         project_memory_idx=project_memory_idx,
+        global_ctx=global_ctx,
+        project_ctx=project_ctx,
+        session_dir=str(turns_dir.parent) if turns_dir else "",
     )
 
     turnLogWriter = TurnLogWriterBus(turn_id=turn_id, base_dir=turns_dir)
@@ -62,7 +71,7 @@ async def run(
     try:
         await bus.publish(TurnStartEvent(turn_id=turn_id, prompt=prompt))
         try:
-            await run_llm_loop(provider, context, on_message=on_message)
+            await run_llm_loop(provider, context, on_message=on_message, on_compact=on_compact)
         except asyncio.CancelledError:
             raise
         except LlmError as exc:
@@ -102,6 +111,7 @@ async def run_llm_loop(
         provider: LlmProvider,
         context: LlmContext,
         on_message: MessageCallback | None = None,
+        on_compact: Callable[[CompactResult], None] | None = None,
 ) -> str:
     while context.status == "running":
         if context.step >= context.max_steps:
@@ -124,6 +134,32 @@ async def run_llm_loop(
             )
             break
         if resp.stop_reason is StopReason.MAX_TOKENS:
+            if resp.tool_calls:
+                # 输出被 max_tokens 截断产生不完整 tool_call：追加 assistant(tool_calls)，并为
+                # 每个孤儿 tool_use 合成错误 tool 结果，维持配对平衡（否则下一轮 OpenAI 400）。
+                context.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": resp.text or None,
+                        "tool_calls": [_as_tool_call_message(c) for c in resp.tool_calls],
+                    }
+                )
+                if on_message is not None:
+                    on_message(
+                        AssistantMessage(
+                            content=resp.text,
+                            tool_calls=[_as_tool_call_message(c) for c in resp.tool_calls],
+                        )
+                    )
+                for call in resp.tool_calls:
+                    err = "<error: 输出被 max_tokens 截断，工具参数不完整>"
+                    context.messages.append(
+                        {"role": "tool", "tool_call_id": call.id, "content": err}
+                    )
+                    if on_message is not None:
+                        on_message(
+                            ToolResultMessage(tool_call_id=call.id, name=call.name, content=err)
+                        )
             context.status, context.reason = "success", "max_tokens"
             await context.bus.publish(
                 StepFinishEvent(
@@ -170,8 +206,58 @@ async def run_llm_loop(
                     finish_reason="need tool call",
                 )
             )
+        await maybe_auto_compact(provider, context, on_compact)
 
     return context.text
+
+
+async def maybe_auto_compact(
+        provider: LlmProvider,
+        context: LlmContext,
+        on_compact: Callable[[CompactResult], None] | None,
+) -> None:
+    """工具执行后按阈值触发自动压缩；失败静默跳过（messages 与 jsonl 均不变）。
+
+    前置跳过：`auto_threshold <= 0.0`（默认禁用）、`context_pct < 阈值`、或 user 消息
+    ≤ keep_recent（无可压缩的更早历史）时不触发。压缩调用走静默总线（compactor 内部
+    临时 bus），usage 不污染主事件流；成功后替换 `context.messages`、发布
+    ContextCompactedEvent、经 on_compact(result) 写回 jsonl（跨 turn 持久，
+    result.ts 供 transcript 备份命名）。
+    """
+    config = get_config()
+    threshold = config.compaction.auto_threshold
+    if threshold <= 0.0 or context.context_pct < threshold:
+        return
+    user_count = sum(1 for m in context.messages if m.get("role") == "user")
+    if user_count <= config.compaction.keep_recent:
+        return
+    session_dir = Path(context.session_dir) if context.session_dir else Path(".")
+    compactor = Compactor()
+    await context.bus.publish(
+        ContextCompactStartEvent(session_id=context.session_id, trigger="auto")
+    )
+    try:
+        result = await compactor.compact_messages(
+            provider,
+            context.messages,
+            keep_recent=config.compaction.keep_recent,
+            session_dir=session_dir,
+            turn_id=context.turn_id,
+        )
+    except Exception:
+        logger.exception("自动压缩失败，静默跳过 turn_id=%s", context.turn_id)
+        return
+    context.messages = result.compacted_messages
+    await context.bus.publish(
+        ContextCompactedEvent(
+            session_id=context.session_id,
+            summary_path=str(result.summary_path),
+            saved_tokens=result.saved_tokens,
+            kept_recent_turns=config.compaction.keep_recent,
+        )
+    )
+    if on_compact is not None:
+        on_compact(result)
 
 
 def _as_tool_call_message(call: ToolCall) -> dict[str, Any]:

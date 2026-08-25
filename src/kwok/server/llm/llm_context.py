@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from kwok.config import get_config
 from kwok.server.event import EventBusManager
 
 _BASE_SYSTEM_PROMPT = """
@@ -45,15 +46,52 @@ class LlmContext:
     session_id: str = ""
     system: str = ""
     project_memory_idx: str = ""
+    global_ctx: str = ""
+    project_ctx: str = ""
+    session_dir: str = ""
+    context_pct: float = 0.0
 
     def system_prompt(self) -> str:
-        """返回当前 run 的 system prompt，必要时注入项目记忆索引。"""
-        if not self.project_memory_idx.strip():
-            return _BASE_SYSTEM_PROMPT
-        return (
-            _BASE_SYSTEM_PROMPT
-            + "\n\n## Project Memory\n"
-            + self.project_memory_idx.strip()
-            + "\n\n读取项目记忆详情请调用 read_project_memory 工具。"
-        )
+        """返回当前 run 的 system prompt：base → Global → Project → 项目记忆索引，空小节跳过。"""
+        text = _BASE_SYSTEM_PROMPT
+        if self.global_ctx.strip():
+            text += "\n\n## Global Context\n" + self.global_ctx
+        if self.project_ctx.strip():
+            text += "\n\n## Project Context\n" + self.project_ctx
+        if self.project_memory_idx.strip():
+            text += (
+                "\n\n## Project Memory\n"
+                + self.project_memory_idx.strip()
+                + "\n\n读取项目记忆详情请调用 read_project_memory 工具。"
+            )
+        return text
+
+    def read_messages(self) -> list[dict[str, Any]]:
+        """返回发送给 LLM 的截断视图：超长 tool 结果保留前段 + 省略提示。
+
+        仅影响发送瞬间的副本，`self.messages`（内存态）与 transcript（持久态）保持全量。
+        """
+        compaction = get_config().compaction
+        truncated: list[dict[str, Any]] = []
+        for msg in self.messages:
+            content = msg.get("content")
+            if (
+                msg.get("role") == "tool"
+                and isinstance(content, str)
+                and len(content) > compaction.tool_result_limit
+            ):
+                keep = compaction.tool_result_keep
+                n = max(0, len(content) - keep)
+                truncated.append(
+                    {
+                        **msg,
+                        "content": (
+                            content[:keep]
+                            + f"[... {n} chars omitted. Full output in run events.]"
+                        ),
+                    }
+                )
+            else:
+                truncated.append(msg)
+        return truncated
 

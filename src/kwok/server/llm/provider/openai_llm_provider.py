@@ -29,8 +29,19 @@ logger = logging.getLogger(__name__)
 
 class OpenAIProvider(LlmProvider):
 
-    def __init__(self, model: str, api_key: str, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        api_key: str,
+        base_url: str | None = None,
+        max_tokens: int = 8192,
+        context_window: int = 128000,
+    ) -> None:
+        # 默认值镜像 config.py 的 _DEFAULT_MAX_TOKENS / _DEFAULT_CONTEXT_WINDOW；
+        # build_provider 始终注入真实配置值。
         self._model = model
+        self._max_tokens = max_tokens
+        self._context_window = context_window
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
     async def stream_chat(self, context: LlmContext) -> LlmResponse:
@@ -40,6 +51,7 @@ class OpenAIProvider(LlmProvider):
             "model": self._model,
             "messages": cast(Any, _messages(context)),
             "stream_options": {"include_usage": True},
+            "max_tokens": self._max_tokens,
         }
         if context.tools:
             stream_kwargs["tools"] = cast(Any, context.tools)
@@ -75,6 +87,8 @@ class OpenAIProvider(LlmProvider):
 
         if usage is not None:
             details = usage.prompt_tokens_details
+            window = self._context_window or 1
+            context.context_pct = min(usage.prompt_tokens / window, 1.0)
             await context.bus.publish(
                 LLMUsageEvent(
                     turn_id=context.turn_id,
@@ -83,6 +97,7 @@ class OpenAIProvider(LlmProvider):
                     output_tokens=usage.completion_tokens,
                     cached_tokens=details.cached_tokens if details is not None else 0,
                     total_tokens=usage.total_tokens,
+                    context_pct=context.context_pct,
                 )
             )
 
@@ -98,11 +113,12 @@ class OpenAIProvider(LlmProvider):
 
 
 def _messages(context: LlmContext) -> list[dict[str, Any]]:
-    """构造发给 API 的 messages：system_prompt 有内容时前置为第一条 system 消息。"""
+    """构造发给 API 的 messages：system_prompt 前置 + L1 截断视图（read_messages）。"""
     system = context.system_prompt()
+    body = context.read_messages()
     if not system:
-        return context.messages
-    return [{"role": "system", "content": system}, *context.messages]
+        return body
+    return [{"role": "system", "content": system}, *body]
 
 
 def _normalize_stop_reason(raw: str | None) -> StopReason:
@@ -126,4 +142,10 @@ def build_provider(config: KwokConfig) -> LlmProvider | None:
     if not api_key or not model:
         raise LlmError("模型未配置，请检查 api_key 和 model 是否配置正确")
     base_url = config.llm.base_url
-    return OpenAIProvider(model=model, api_key=api_key, base_url=base_url)
+    return OpenAIProvider(
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        max_tokens=config.llm.max_tokens,
+        context_window=config.compaction.context_window,
+    )

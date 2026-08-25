@@ -3,10 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
+import subprocess
 from collections.abc import Iterable
 
 from textual.app import App
 from textual.widget import Widget
+from textual.widgets import OptionList
 
 from kwok.config import get_config
 from kwok.protocol.errors import RpcConnectionError, RpcError
@@ -32,10 +35,25 @@ from kwok.tui.widgets import (
     StatusBar,
     Transcript,
 )
+from kwok.tui.widgets.command_palette import COMMANDS, CommandPalette
 
-_SUB_PATTERNS = ["turn.*", "step.*", "llm.*", "tool.**", "server.*", "permission.*"]
+_SUB_PATTERNS = ["turn.*", "step.*", "llm.*", "tool.**", "server.*", "permission.*", "context.*"]
 
 logger = logging.getLogger(__name__)
+
+
+def _write_clipboard(text: str) -> bool:
+    """跨平台写入系统剪贴板（macOS pbcopy / Linux wl-copy|xclip|xsel）。"""
+    for cmd in ("pbcopy", "wl-copy", "xclip", "xsel"):
+        exe = shutil.which(cmd)
+        if exe is None:
+            continue
+        try:
+            subprocess.run([exe], input=text.encode("utf-8"), check=False)
+            return True
+        except OSError:
+            continue
+    return False
 
 
 class KwokTuiApp(App[None]):
@@ -107,6 +125,7 @@ class KwokTuiApp(App[None]):
     BINDINGS = [
         ("ctrl+q", "quit_app", "退出"),
         ("escape", "quit_app", "退出"),
+        ("ctrl+y", "copy_selection", "复制选中区"),
     ]
 
     def __init__(self) -> None:
@@ -118,19 +137,34 @@ class KwokTuiApp(App[None]):
         self._shutting_down = False
         # tool_use_id → 审批控件；granted/denied 或 respond 后卸载（幂等去重）
         self._permission_widgets: dict[str, PermissionSelect] = {}
+        # 斜杠命令弹层：挂 Screen 层（作为 InputPanel 子元素会被裁剪）
+        self._palette = CommandPalette()
 
     def compose(self) -> Iterable[Widget]:
         yield Transcript(id="transcript")
         yield InputPanel(id="input")
         yield StatusBar(id="status")
+        # 弹层最后产出：绝对定位悬浮在输入面板上方，DOM 靠后保证盖住 Transcript
+        yield self._palette
 
     # ---- 装配 ----
 
     def on_mount(self) -> None:
         self.title = "kwok-tui"
         self._renderer = EventRenderer(self.query_one(Transcript), self.state)
+        self.query_one(InputPanel).bind_palette(self._palette)
         self.query_one(PromptTextArea).focus()
         self.run_worker(self._run_client(), name="tui-client", exclusive=True)
+
+    def on_option_list_option_selected(
+        self, message: OptionList.OptionSelected
+    ) -> None:
+        """鼠标点选弹层候选：补全命令并回到输入框。"""
+        if message.option_id is None:
+            return
+        panel = self.query_one(InputPanel)
+        panel.prompt_area.complete_command(message.option_id)
+        panel.prompt_area.focus()
 
     # ---- 客户端 worker：连接/订阅/建会话/事件迭代 ----
 
@@ -258,6 +292,10 @@ class KwokTuiApp(App[None]):
         if not prompt:
             return
         if prompt.startswith("/"):
+            # 命令与普通消息一致：先本地回显 + 清空输入框，再分发处理。
+            # 纯 UI 反馈，无需服务端事件——服务端结果已由 ContextCompactedEvent → ⚡ 横幅反映。
+            self.query_one(Transcript).append_user(prompt)
+            self.query_one(InputPanel).clear()
             self._handle_command(prompt)
             return
         self.state.turn_count += 1
@@ -280,20 +318,36 @@ class KwokTuiApp(App[None]):
             self._sync_status()
             self._sync_input()
 
+    async def _send_compact(self) -> None:
+        """手动压缩：发 session.compact IPC；成功后 ⚡ 横幅由 ContextCompactedEvent 渲染。"""
+        try:
+            await self._client.compact(self.state.session_id)
+        except (RpcError, RpcConnectionError) as exc:
+            self.query_one(Transcript).add_error(f"压缩失败：{exc}")
+
     # ---- 命令与退出 ----
 
     def _handle_command(self, prompt: str) -> None:
         cmd = prompt.strip().lower()
+        # 弹层与分发共用 COMMANDS 注册表：未注册的命令一律报未知
+        if cmd not in COMMANDS:
+            self.query_one(Transcript).add_error(f"未知命令：{cmd}")
+            return
         if cmd == "/exit":
             self.action_quit_app()
         elif cmd == "/help":
             self.query_one(Transcript).append_info(
-                "可用命令：/exit 退出  /help 帮助  /clear 清屏"
+                "可用命令：" + "  ".join(f"{name} {desc}" for name, desc in COMMANDS.items())
             )
         elif cmd == "/clear":
             self.query_one(Transcript).clear()
-        else:
-            self.query_one(Transcript).add_error(f"未知命令：{cmd}")
+        elif cmd == "/compact":
+            if self.state.turn_in_flight:
+                self.query_one(Transcript).append_info("turn 进行中，无法压缩")
+            else:
+                self.run_worker(
+                    self._send_compact(), name=f"compact-{self.state.session_id}"
+                )
 
     def action_quit_app(self) -> None:
         if self._shutting_down:
@@ -311,6 +365,23 @@ class KwokTuiApp(App[None]):
         self.exit(return_code=0)
 
     # ---- 状态同步 ----
+
+    def copy_text(self, text: str) -> None:
+        """复制文本到剪贴板；失败时给出明确提示（缺少剪贴板命令）。"""
+        if _write_clipboard(text):
+            self.notify(f"已复制 {len(text)} 字符", title="剪贴板")
+        else:
+            self.query_one(Transcript).add_error(
+                "复制失败：未找到 pbcopy/wl-copy/xclip/xsel 剪贴板命令"
+            )
+
+    def action_copy_selection(self) -> None:
+        """Ctrl+Y 复制当前拖选的文本（Textual 原生选区，消息块默认允许选择）。"""
+        selected = self.screen.get_selected_text()
+        if not selected:
+            self.notify("未选中文本，请先拖选要复制的内容")
+            return
+        self.copy_text(selected)
 
     def _sync_status(self) -> None:
         self.query_one(StatusBar).render_state(self.state)

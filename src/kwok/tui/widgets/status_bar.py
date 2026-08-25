@@ -20,11 +20,20 @@ class StatusBar(Static):
             if state.turn_in_flight
             else "[dim]idle[/dim]"
         )
+        filled = min(20, max(0, int(state.context_pct * 20)))
+        bar = "█" * filled + "░" * (20 - filled)
+        if state.context_pct >= 0.85:
+            ctx = f"ctx:{state.context_pct * 100:.1f}% [#B93C5B]{bar}[/#B93C5B]"
+        elif state.context_pct >= 0.70:
+            ctx = f"ctx:{state.context_pct * 100:.1f}% [#FEA62B]{bar}[/#FEA62B]"
+        else:
+            ctx = f"ctx:{state.context_pct * 100:.1f}% {bar}"
         parts = [
             conn,
             f"sess={state.session_id or '-'}",
             f"model={state.model or '-'}",
             f"[dim]tokens {state.token_summary}[/dim]",
+            ctx,
             flight,
         ]
         self.update("  ·  ".join(parts))

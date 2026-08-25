@@ -5,6 +5,7 @@ from typing import Any
 from rich.markup import escape
 from rich.rule import Rule
 from textual.containers import VerticalScroll
+from textual.timer import Timer
 from textual.widgets import Markdown, Static
 from textual.widgets.markdown import MarkdownStream
 
@@ -55,6 +56,10 @@ class Transcript(VerticalScroll):
         super().__init__(*args, **kwargs)
         self._stream: MarkdownStream | None = None
         self._tool_blocks: dict[str, tuple[Static, str, str]] = {}
+        self._compact: Static | None = None
+        self._compact_prefix: str = ""
+        self._compact_dots: int = 0
+        self._compact_timer: Timer | None = None
 
     # ---- 组装：内部关闭进行中的流式块 ----
 
@@ -91,6 +96,34 @@ class Transcript(VerticalScroll):
     def append_info(self, text: str) -> None:
         self.mount(Static(f"[dim]{escape(text)}[/dim]"))
         self.scroll_end(animate=False)
+
+    def begin_compact(self, trigger: str) -> None:
+        """追加一条动态压缩行：每秒 +1 堆积点（1→6 循环），完成时由 end_compact 终结。"""
+        if self._compact is not None:
+            return
+        self._compact_prefix = "检测到上下文占用偏高，正在" if trigger == "auto" else "正在"
+        self._compact_dots = 0
+        self._compact = Static(f"[dim]♻️ {self._compact_prefix}压缩上下文[/dim]")
+        self.mount(self._compact)
+        self.scroll_end(animate=False)
+        self._compact_timer = self.set_interval(1.0, self._tick_compact)
+
+    def _tick_compact(self) -> None:
+        if self._compact is None:
+            return
+        self._compact_dots = self._compact_dots % 6 + 1
+        dots = "●" * self._compact_dots
+        self._compact.update(f"[dim]♻️ {self._compact_prefix}压缩上下文{dots}[/dim]")
+
+    def end_compact(self, done_msg: str) -> None:
+        """压缩结束：停掉 tick，把压缩行原位替换为结果文案。"""
+        if self._compact_timer is not None:
+            self._compact_timer.stop()
+            self._compact_timer = None
+        if self._compact is not None:
+            self._compact.update(done_msg)
+            self._compact = None
+            self.scroll_end(animate=False)
 
     def add_error(self, message: str) -> None:
         self.mount(
@@ -165,6 +198,10 @@ class Transcript(VerticalScroll):
     # ---- 其他 ----
 
     def clear(self) -> None:
+        if self._compact_timer is not None:
+            self._compact_timer.stop()
+            self._compact_timer = None
+        self._compact = None
         self.remove_children()
         self._tool_blocks.clear()
         self._stream = None

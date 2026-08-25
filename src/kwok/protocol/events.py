@@ -23,6 +23,8 @@ class EventType(StrEnum):
     PERMISSION_REQUESTED = "permission.requested"
     PERMISSION_GRANTED = "permission.granted"
     PERMISSION_DENIED = "permission.denied"
+    CONTEXT_COMPACT_START = "context.compact_start"
+    CONTEXT_COMPACTED = "context.compacted"
 
 
 class BaseEvent(BaseModel):
@@ -93,6 +95,7 @@ class LLMUsageEvent(BaseEvent):
     output_tokens: int
     cached_tokens: int
     total_tokens: int
+    context_pct: float = 0.0
 
 
 class TurnStartHandlerChatDoneEvent(BaseEvent):
@@ -134,6 +137,20 @@ class PermissionDeniedEvent(BaseEvent):
     decision: PermissionDecision
 
 
+class ContextCompactStartEvent(BaseEvent):
+    type: Literal[EventType.CONTEXT_COMPACT_START] = EventType.CONTEXT_COMPACT_START
+    session_id: str
+    trigger: Literal["manual", "auto"]
+
+
+class ContextCompactedEvent(BaseEvent):
+    type: Literal[EventType.CONTEXT_COMPACTED] = EventType.CONTEXT_COMPACTED
+    session_id: str
+    summary_path: str
+    saved_tokens: int
+    kept_recent_turns: int
+
+
 Event = (LLMChunkEvent
          | LLMUsageEvent
          | TurnErrorEvent
@@ -147,5 +164,7 @@ Event = (LLMChunkEvent
          | PermissionRequestedEvent
          | PermissionGrantedEvent
          | PermissionDeniedEvent
+         | ContextCompactStartEvent
+         | ContextCompactedEvent
          )
 EVENT_ADAPTER: TypeAdapter[Event] = TypeAdapter(Event)

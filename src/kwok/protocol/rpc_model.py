@@ -21,6 +21,7 @@ class Method(StrEnum):
     SESSION_CREATE = "session.create"
     SESSION_PROMPT = "session.prompt"
     SESSION_CLOSE = "session.close"
+    SESSION_COMPACT = "session.compact"
     PERMISSION_RESPOND = "permission.respond"
 
 
@@ -189,6 +190,18 @@ class SessionCloseReq(BaseRpcReq):
 class SessionCloseResp(BaseModel):
     type: Literal["session.close"] = "session.close"
     session_id: str
+
+
+class SessionCompactReq(BaseRpcReq):
+    method: Method = Method.SESSION_COMPACT
+    session_id: str
+
+
+class SessionCompactResp(BaseModel):
+    type: Literal["session.compact"] = "session.compact"
+    summary_path: str
+    token_count: int
+    saved_tokens: int
 
 
 class PermissionRespondReq(BaseRpcReq):

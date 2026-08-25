@@ -10,15 +10,19 @@ from pathlib import Path
 from typing import Any
 
 from kwok import __version__
+from kwok.config import get_config
 from kwok.protocol.errors import LlmError
+from kwok.protocol.events import ContextCompactedEvent, ContextCompactStartEvent
+from kwok.server.compact import Compactor, CompactResult
 from kwok.server.event import get_bus
 from kwok.server.llm.loop import run
 from kwok.server.llm.model import AssistantMessage, ToolResultMessage, UserMessage
 from kwok.server.llm.provider.llm_provider import LlmProvider
+from kwok.server.memory import load_global_and_project
 from kwok.server.session.meta import NameSource, SessionKind, SessionMeta, SessionStatus
 from kwok.server.session.name import derive_name
 from kwok.server.session.store import SessionStore
-from kwok.server.session.transcript import records_to_messages
+from kwok.server.session.transcript import messages_to_records, records_to_messages
 from kwok.server.session.writer import SessionTranscriptWriter
 from kwok.server.tools.context import cwd_var, read_files_var
 from kwok.util.id_generator import gen_session_id, gen_turn_id
@@ -75,6 +79,8 @@ class SessionManager:
         self._version = version
         self._sessions: dict[str, Session] = {}
         self._turn_tasks: set[asyncio.Task[None]] = set()
+        self._compact_lock = asyncio.Lock()
+        self._compactor = Compactor()
 
     def create(
         self,
@@ -178,6 +184,7 @@ class SessionManager:
             token = cwd_var.set(session.meta.cwd)
             read_token = read_files_var.set(session.read_files)
             try:
+                global_ctx, project_ctx = load_global_and_project()
                 await run(
                     provider,
                     message,
@@ -187,6 +194,12 @@ class SessionManager:
                     history=history,
                     session_id=session.id,
                     project_memory_idx=self._store.read_memory_index(session.meta.cwd),
+                    global_ctx=global_ctx,
+                    project_ctx=project_ctx,
+                    on_compact=lambda result: session.transcript_writer.rewrite(
+                        messages_to_records(result.compacted_messages, turn_id=turn_id),
+                        ts=result.ts,
+                    ),
                 )
             finally:
                 cwd_var.reset(token)
@@ -208,6 +221,61 @@ class SessionManager:
         self._terminate(session)
         session.transcript_writer.close()
         return session
+
+    def _ensure_compactable(self, session: Session) -> None:
+        """压缩前置状态校验：run 进行中（busy）/ 已结束（terminated）拒绝。"""
+        if session.meta.status == "busy":
+            raise LlmError("会话忙，请等上一轮结束")
+        if session.meta.status == "terminated":
+            raise LlmError("会话已结束")
+
+    async def compact(self, session_id: str, owner: str) -> CompactResult:
+        """手动压缩：owner + 非 busy + 锁内复查 → 读盘 → L5 摘要 → 写回 jsonl → 发布事件。
+
+        与 run 互斥：run 进行中直接拒绝；锁内复查防「busy 校验与加锁之间」的 launch_turn
+        竞态（D5）。压缩调用抛错时不写回——jsonl 保持原样、不产生备份。
+        写回时原文件以 `<session-id>.jsonl.<ts>.bak` 留档（纯时间戳，与 summary_<ts>.md 同 ts）。
+        滑动窗口保留最近 N 轮原始记录（原 ts/turn_id），只压缩更早历史。
+        """
+        session = self.get_owned(session_id, owner)
+        self._ensure_compactable(session)
+        async with self._compact_lock:
+            self._ensure_compactable(session)
+            records = session.transcript_writer.read_records()
+            keep_recent = get_config().compaction.keep_recent
+            user_indexes = [i for i, rec in enumerate(records) if rec.role == "user"]
+            if len(user_indexes) <= keep_recent:
+                raise LlmError("无可压缩内容：会话更早历史不足")
+            cut = user_indexes[-keep_recent]
+            provider = self._get_provider()
+            if provider is None:
+                raise LlmError("provider 未初始化")
+            await self._bus.publish(
+                ContextCompactStartEvent(session_id=session_id, trigger="manual")
+            )
+            result = await self._compactor.compact_messages(
+                provider,
+                records_to_messages(records),
+                keep_recent=keep_recent,
+                session_dir=session.dir,
+                turn_id="compact",
+            )
+            summary_records = messages_to_records(
+                result.compacted_messages[:2], turn_id="compact"
+            )
+            session.transcript_writer.rewrite(
+                [*summary_records, *records[cut:]], ts=result.ts
+            )
+            await self._bus.publish(
+                ContextCompactedEvent(
+                    session_id=session_id,
+                    summary_path=str(result.summary_path),
+                    saved_tokens=result.saved_tokens,
+                    kept_recent_turns=keep_recent,
+                )
+            )
+            logger.info("会话已手动压缩：%s saved=%s", session_id, result.saved_tokens)
+            return result
 
     def close_all(self) -> None:
         """daemon 停机：全部会话置 terminated 并关闭 writer。"""

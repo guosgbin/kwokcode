@@ -9,13 +9,15 @@ from textual.widget import Widget
 from textual.widgets import Rule, Static, TextArea
 
 from kwok.tui.messages import SubmitPrompt
+from kwok.tui.widgets.command_palette import COMMANDS, CommandPalette
 
 
 class PromptTextArea(TextArea):
-    """拦截 Enter（提交）/ Ctrl+J（换行），并支持 ↑/↓ 浏览历史命令。
+    """拦截 Enter（提交）/ Ctrl+J（换行），支持 ↑/↓ 浏览历史，并驱动斜杠命令弹层。
 
     TextArea 默认在内部 keymap 处理 Enter 为换行、↑/↓ 为移动游标，父级绑定无法抢先，
-    故子类化在 _on_key 层拦截。
+    故子类化在 _on_key 层拦截。弹层可见时 ↑/↓/Tab/Esc 让位给命令补全，
+    Enter 则补全高亮命令并直接发送。
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -23,11 +25,40 @@ class PromptTextArea(TextArea):
         self._history: list[str] = []
         self._history_index: int | None = None
         self._draft: str = ""
+        self._palette: CommandPalette | None = None
+
+    def bind_palette(self, palette: CommandPalette) -> None:
+        self._palette = palette
 
     async def _on_key(self, event: events.Key) -> None:
+        palette = self._palette
+        if palette is not None and palette.is_visible:
+            # 弹层优先：↑/↓ 切候选，Tab/Shift+Tab 补全，Esc 关闭，
+            # Enter 发送高亮命令。stop + prevent_default 阻止事件冒泡到
+            # Screen 的 tab→focus_next 与 App 的 escape→quit_app。
+            if event.key in ("up", "down"):
+                event.stop()
+                event.prevent_default()
+                palette.move_highlight(-1 if event.key == "up" else 1)
+                return
+            if event.key in ("tab", "shift+tab"):
+                event.stop()
+                event.prevent_default()
+                self._complete_from_palette()
+                return
+            if event.key == "escape":
+                event.stop()
+                event.prevent_default()
+                palette.hide()
+                return
         if event.key == "enter":
             event.stop()
             event.prevent_default()
+            if palette is not None and palette.is_visible:
+                command = palette.highlighted_command()
+                if command is not None:
+                    # 高亮候选上按 Enter：补全该命令并直接发送
+                    self.complete_command(command)
             self._record_history()
             self.post_message(SubmitPrompt(self.text))
             return
@@ -48,6 +79,43 @@ class PromptTextArea(TextArea):
             self._browse_history(1)
             return
         await super()._on_key(event)
+
+    # ---- 斜杠命令弹层 ----
+
+    def _on_text_area_changed(self, message: TextArea.Changed) -> None:
+        """文本变化驱动弹层：以 "/" 开头显示并过滤，否则隐藏。
+
+        已输入完整命令（/compact 等）时隐藏，避免补全后弹层复现。
+        """
+        palette = self._palette
+        if palette is None:
+            return
+        text = self.text
+        if text.startswith("/"):
+            if text.lower() in COMMANDS:
+                palette.hide()
+                return
+            body = text[1:]
+            prefix = body.split()[0].lower() if body.split() else ""
+            palette.show(prefix)
+        else:
+            palette.hide()
+
+    def _complete_from_palette(self) -> None:
+        if self._palette is None:
+            return
+        command = self._palette.highlighted_command()
+        if command is None:
+            return
+        self.complete_command(command)
+
+    def complete_command(self, command: str) -> None:
+        """把命令写回输入框（Tab / 鼠标点选共用）。"""
+        palette = self._palette
+        if palette is not None:
+            palette.hide()
+        self.text = command
+        self.move_cursor(self.document.end)
 
     # ---- 历史命令浏览 ----
 
@@ -92,13 +160,20 @@ class PromptTextArea(TextArea):
 
 
 class InputPanel(Container):
-    """底部输入区：组合 PromptTextArea，暴露 启用/禁用/清空 操作。"""
+    """底部输入区：组合 PromptTextArea，暴露 启用/禁用/清空 操作。
+
+    斜杠命令弹层（CommandPalette）由 App 挂在 Screen 层，经 bind_palette 注入；
+    弹层是绝对定位、运行时锚定到输入框上方，不能作为本组件的子元素（会被裁剪）。
+    """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.prompt_area = PromptTextArea(
-            placeholder="输入消息，Enter 发送，Ctrl+J 换行"
+            placeholder="输入消息，Enter 发送，Ctrl+J 换行，，Ctrl+Q 退出，，Ctrl+Y 复制"
         )
+
+    def bind_palette(self, palette: CommandPalette) -> None:
+        self.prompt_area.bind_palette(palette)
 
     def compose(self) -> Iterable[Widget]:
         # 上下两条贯穿横线 + 左侧 ">" 提示符（替代原来的方框）

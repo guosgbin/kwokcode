@@ -181,7 +181,9 @@ class SocketClient:
             if not queues:
                 del self._subs[pattern]
 
-    async def call(self, params: BaseRpcReq) -> Any:
+    async def call(
+            self, params: BaseRpcReq, *, timeout: float | None = None
+    ) -> Any:
 
         if self._closed or self._writer is None or self._reader is None:
             raise RpcConnectionError("客户端未连接")
@@ -199,7 +201,9 @@ class SocketClient:
                 pending_future.cancel()
             raise RpcConnectionError(f"发送失败: {exc}") from exc
         try:
-            return await asyncio.wait_for(future, timeout=self._timeout)
+            # timeout 覆盖：None 走默认（self._timeout）；慢 RPC（如压缩）由调用方显式放宽
+            wait_timeout = self._timeout if timeout is None else timeout
+            return await asyncio.wait_for(future, timeout=wait_timeout)
         except TimeoutError:
             pending_future = self._pending.pop(req_id) if req_id in self._pending else None
             if pending_future is not None:

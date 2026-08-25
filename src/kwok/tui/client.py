@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any, cast
 
+from kwok.config import get_config
 from kwok.net.client import SocketClient
 from kwok.protocol.enums import PermissionDecision
 from kwok.protocol.events import BaseEvent
@@ -10,6 +11,8 @@ from kwok.protocol.rpc_model import (
     PermissionRespondReq,
     PromptResp,
     SessionCloseReq,
+    SessionCompactReq,
+    SessionCompactResp,
     SessionCreateReq,
     SessionCreateResp,
     SessionPromptReq,
@@ -53,6 +56,17 @@ class TuiClient:
 
     async def close_session(self, session_id: str) -> None:
         await self._client.call(SessionCloseReq(session_id=session_id))
+
+    async def compact(self, session_id: str) -> SessionCompactResp:
+        # 压缩是慢 RPC：服务端要跑一次 LLM 摘要调用（受 llm.timeout 约束），
+        # 不套用默认 3s 的 socket 超时，否则 /compact 秒级误报"等待响应超时"。
+        wait = get_config().llm.timeout + 60
+        resp = SessionCompactResp.model_validate(
+            await self._client.call(
+                SessionCompactReq(session_id=session_id), timeout=wait
+            )
+        )
+        return resp
 
     async def send_permission_respond(
             self, tool_use_id: str, decision: PermissionDecision

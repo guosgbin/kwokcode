@@ -154,7 +154,11 @@ class SocketServer:
             if self._on_disconnect is not None:
                 self._on_disconnect(connection_id)
             writer.close()
-            await writer.wait_closed()
+            # peer 发 RST（如客户端带未读数据关闭）时 wait_closed 会 re-raise
+            # ConnectionResetError；与 _close_all_writers 的收尾一致地吞掉，
+            # 否则逃逸成 asyncio "Unhandled exception in client_connected_cb"。
+            with contextlib.suppress(ConnectionError, OSError):
+                await writer.wait_closed()
 
     async def _run_request(
             self,

@@ -6,6 +6,7 @@ from typing import Any
 from kwok.net.requset_context import RequestContext
 from kwok.protocol.errors import UnknownMethodError
 from kwok.protocol.rpc_model import Method
+from kwok.server.cmd_handlers.compact import SessionCompactHandler
 from kwok.server.cmd_handlers.events import (
     SubscribeHandler,
     UnsubscribeHandler,
@@ -43,6 +44,7 @@ class EventHandlerManager:
             Method.EVENT_UNSUBSCRIBE: UnsubscribeHandler(),
             Method.SESSION_CREATE: SessionCreateHandler(sessions),
             Method.SESSION_CLOSE: SessionCloseHandler(sessions),
+            Method.SESSION_COMPACT: SessionCompactHandler(sessions),
             Method.PERMISSION_RESPOND: PermissionRespondHandler(permissions),
         }
 

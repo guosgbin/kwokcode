@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from kwok.protocol.events import (
     BaseEvent,
+    ContextCompactedEvent,
+    ContextCompactStartEvent,
     LLMChunkEvent,
     LLMUsageEvent,
     ServerStatusEvent,
@@ -45,12 +47,19 @@ class EventRenderer:
             self._state.tokens_out += event.output_tokens
             self._state.tokens_cached += event.cached_tokens
             self._state.tokens_total += event.total_tokens
+            self._state.context_pct = event.context_pct
         elif isinstance(event, ToolCallStartEvent):
             # 关闭当前流式块，让工具块插入推理文本与最终答案之间（对标 Claude Code）
             await self._transcript.finish_assistant()
             self._transcript.add_tool(event.tool_call_id, event.name, event.arguments)
         elif isinstance(event, ToolCallFinishEvent):
             self._transcript.update_tool(event.tool_call_id, event.result)
+        elif isinstance(event, ContextCompactStartEvent):
+            self._transcript.begin_compact(event.trigger)
+        elif isinstance(event, ContextCompactedEvent):
+            self._transcript.end_compact(
+                f"⚡ 上下文已压缩：saved≈{event.saved_tokens} tokens，摘要 {event.summary_path}"
+            )
         elif isinstance(event, ServerStatusEvent):
             # "running" 是服务端稳态，不应覆盖 TUI 的 connected（否则输入框被禁用）；
             # 仅 "stopping" 需要反映为停止中。

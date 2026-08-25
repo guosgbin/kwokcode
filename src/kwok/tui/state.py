@@ -15,6 +15,7 @@ class UiState:
     tokens_out: int = 0
     tokens_cached: int = 0
     tokens_total: int = 0
+    context_pct: float = 0.0
     turn_in_flight: bool = False
     last_error: str | None = None
 
