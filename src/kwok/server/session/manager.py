@@ -186,6 +186,7 @@ class SessionManager:
                     on_message=on_message,
                     history=history,
                     session_id=session.id,
+                    project_memory_idx=self._store.read_memory_index(session.meta.cwd),
                 )
             finally:
                 cwd_var.reset(token)

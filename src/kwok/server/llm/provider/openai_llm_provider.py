@@ -38,7 +38,7 @@ class OpenAIProvider(LlmProvider):
         usage: Any = None
         stream_kwargs: dict[str, Any] = {
             "model": self._model,
-            "messages": cast(Any, context.messages),
+            "messages": cast(Any, _messages(context)),
             "stream_options": {"include_usage": True},
         }
         if context.tools:
@@ -95,6 +95,14 @@ class OpenAIProvider(LlmProvider):
             ],
             text=message.content or "",
         )
+
+
+def _messages(context: LlmContext) -> list[dict[str, Any]]:
+    """构造发给 API 的 messages：system_prompt 有内容时前置为第一条 system 消息。"""
+    system = context.system_prompt()
+    if not system:
+        return context.messages
+    return [{"role": "system", "content": system}, *context.messages]
 
 
 def _normalize_stop_reason(raw: str | None) -> StopReason:

@@ -103,6 +103,15 @@ class SessionStore:
         lines.append(f"- [{_index_text(summary)}]({filename})")
         index.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
+    def read_memory_index(self, cwd: str) -> str:
+        """读取项目记忆索引 MEMORY.md；无文件或读取失败返回空串。"""
+        index = self.memory_dir(cwd) / _INDEX_FILENAME
+        try:
+            return index.read_text(encoding="utf-8") if index.is_file() else ""
+        except OSError:
+            logger.warning("项目记忆索引读取失败，跳过：%s", index)
+            return ""
+
     def meta_path(self, session_dir: Path) -> Path:
         """会话 meta 文件路径。"""
         return session_dir / _META_FILENAME

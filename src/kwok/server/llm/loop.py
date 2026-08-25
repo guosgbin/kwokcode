@@ -38,6 +38,7 @@ async def run(
         on_message: MessageCallback | None = None,
         history: Sequence[dict[str, Any]] = (),
         session_id: str = "",
+        project_memory_idx: str = "",
 ) -> None:
     bus = get_bus()
     config = get_config()
@@ -51,6 +52,7 @@ async def run(
         messages=messages,
         tools=get_tool_registry().schemas(),
         session_id=session_id,
+        project_memory_idx=project_memory_idx,
     )
 
     turnLogWriter = TurnLogWriterBus(turn_id=turn_id, base_dir=turns_dir)
