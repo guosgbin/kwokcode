@@ -4,7 +4,9 @@ from typing import TYPE_CHECKING
 
 from kwok.server.tools.prebuilt.bash import BashTool
 from kwok.server.tools.prebuilt.edit import EditTool
-from kwok.server.tools.prebuilt.read_file import ReadFileTool
+from kwok.server.tools.prebuilt.glob import GlobTool
+from kwok.server.tools.prebuilt.grep import GrepTool
+from kwok.server.tools.prebuilt.read import ReadFileTool
 from kwok.server.tools.prebuilt.read_project_memory import ReadProjectMemoryTool
 from kwok.server.tools.prebuilt.read_project_memory_idx import ReadProjectMemoryIdxTool
 from kwok.server.tools.prebuilt.write import WriteTool
@@ -25,6 +27,8 @@ def init_tool_registry(store: SessionStore | None = None) -> None:
     _registry = ToolRegistry()
     _registry.register(BashTool())
     _registry.register(EditTool())
+    _registry.register(GlobTool())
+    _registry.register(GrepTool())
     _registry.register(ReadFileTool())
     _registry.register(WriteTool())
     if store is not None:

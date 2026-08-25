@@ -26,7 +26,7 @@ class ReadFileResult(BaseModel):
 
 
 class ReadFileTool(Tool):
-    name = "read_file"
+    name = "read"
     description = "读取指定路径的本地文本文件内容并返回。支持 offset/limit 分页读取大文件。"
     input_model = ReadFileParams
     output_model = ReadFileResult
