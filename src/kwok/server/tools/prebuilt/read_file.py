@@ -35,7 +35,8 @@ class ReadFileTool(Tool):
 
     def execute(self, args: dict[str, Any]) -> dict[str, Any]:
         result = self._do_read(args)
-        self._mark_read(args["path"])
+        if not result.get("is_partial"):
+            self._mark_read(args["path"])
         return result
 
     def _do_read(self, args: dict[str, Any]) -> dict[str, Any]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from kwok.server.tools.prebuilt.bash import BashTool
+from kwok.server.tools.prebuilt.edit import EditTool
 from kwok.server.tools.prebuilt.read_file import ReadFileTool
 from kwok.server.tools.prebuilt.read_project_memory import ReadProjectMemoryTool
 from kwok.server.tools.prebuilt.read_project_memory_idx import ReadProjectMemoryIdxTool
@@ -23,6 +24,7 @@ def init_tool_registry(store: SessionStore | None = None) -> None:
         return
     _registry = ToolRegistry()
     _registry.register(BashTool())
+    _registry.register(EditTool())
     _registry.register(ReadFileTool())
     _registry.register(WriteTool())
     if store is not None:
