@@ -13,6 +13,7 @@ from kwok.server.event import init_event_system
 from kwok.server.llm import LlmProvider, build_provider
 from kwok.server.permissions import PermissionManager, init_permissions
 from kwok.server.session import SessionManager, SessionStore
+from kwok.server.subagent import get_task_registry, init_subagent_system
 from kwok.server.tools import init_tool_registry
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ class KwokApp:
         store = SessionStore(config.projects_dir)
         init_tool_registry(store)
         self._permissions = init_permissions()
+        assert self._provider is not None
+        init_subagent_system(self._provider)
         self._sessions = SessionManager(
             store=store,
             get_provider=lambda: self._provider,
@@ -61,10 +64,16 @@ class KwokApp:
         assert self._permissions is not None
 
         def _on_disconnect(connection_id: str) -> None:
-            # 组合回调：先清该连接各 session 的 pending 审批，再终止会话本身
+            # 组合回调：先清该连接各 session 的 pending 审批，再级联取消后台子任务，最后终止会话本身
             assert self._permissions is not None
-            for session_id in self._sessions.sessions_for_connection(connection_id):
+            session_ids = self._sessions.sessions_for_connection(connection_id)
+            for session_id in session_ids:
                 self._permissions.cancel_session(session_id)
+            try:
+                get_task_registry().cancel_by_session(session_ids)
+            except RuntimeError:
+                # subagent 系统未初始化（极早期断连）：清理路径不允许抛错
+                pass
             self._sessions.terminate_owned(connection_id)
 
         socketServer = SocketServer(

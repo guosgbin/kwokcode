@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from kwok.server.llm.model import ToolCall
@@ -12,25 +13,36 @@ from kwok.server.tools.tool import RetryStrategy, Tool, ToolError
 if TYPE_CHECKING:
     from kwok.server.llm.llm_context import LlmContext
 
+agent_ctx_var: ContextVar[LlmContext | None] = ContextVar("agent_ctx", default=None)
+"""当前正在执行工具的 turn 上下文（LlmContext），工具可读取（仿 cwd_var 模式）。
+
+spawn_agent 等事件循环协作工具靠它拿到父 turn_id / session / tool_registry。
+to_thread 会拷贝 context，同步工具线程内同样可读。
+"""
+
 
 async def tool_execute(call: ToolCall, ctx: LlmContext) -> str:
-    async def _core() -> str:
-        tool = call.resolved_tool
-        args = call.validated_args
-        # 参数校验中间件（ToolParamCheckMiddleware）保证执行前已填充这两个字段
-        assert tool is not None, "工具未解析（resolved_tool 缺失）"
-        assert args is not None, "工具参数未校验（validated_args 缺失）"
-        result = await _run_with_governance(tool, args)
-        if isinstance(result, str):
-            return result
-        if tool.output_model is not None:
-            try:
-                tool.output_model.model_validate(result)
-            except Exception as exc:
-                return f"工具输出不符合声明结构：{exc}"
-        return json.dumps(result, ensure_ascii=False)
+    token = agent_ctx_var.set(ctx)
+    try:
+        async def _core() -> str:
+            tool = call.resolved_tool
+            args = call.validated_args
+            # 参数校验中间件（ToolParamCheckMiddleware）保证执行前已填充这两个字段
+            assert tool is not None, "工具未解析（resolved_tool 缺失）"
+            assert args is not None, "工具参数未校验（validated_args 缺失）"
+            result = await _run_with_governance(tool, args)
+            if isinstance(result, str):
+                return result
+            if tool.output_model is not None:
+                try:
+                    tool.output_model.model_validate(result)
+                except Exception as exc:
+                    return f"工具输出不符合声明结构：{exc}"
+            return json.dumps(result, ensure_ascii=False)
 
-    return await get_middleware_chain().invoke_around_tool(ctx, call, _core)
+        return await get_middleware_chain().invoke_around_tool(ctx, call, _core)
+    finally:
+        agent_ctx_var.reset(token)
 
 
 async def _run_with_governance(
@@ -70,10 +82,23 @@ async def _run_with_governance(
 async def _run_once(
     tool: Tool, args: dict[str, Any], timeout: float | None
 ) -> dict[str, Any]:
-    """单次执行；timeout <= 0 视为未配置不包裹。"""
+    """单次执行；timeout <= 0 视为未配置不包裹。
+
+    覆写 execute_async 的工具直接在事件循环内 await（spawn 等需要协作的工具），
+    否则走 asyncio.to_thread 同步执行。
+    """
+    if _has_async_execute(tool):
+        if timeout is not None and timeout > 0:
+            return await asyncio.wait_for(tool.execute_async(args), timeout)
+        return await tool.execute_async(args)
     if timeout is not None and timeout > 0:
         return await asyncio.wait_for(asyncio.to_thread(tool.execute, args), timeout)
     return await asyncio.to_thread(tool.execute, args)
+
+
+def _has_async_execute(tool: Tool) -> bool:
+    """是否覆写了 execute_async（覆写=事件循环内 await，否则 to_thread 同步执行）。"""
+    return type(tool).execute_async is not Tool.execute_async
 
 
 def _can_retry(

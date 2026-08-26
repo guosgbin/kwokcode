@@ -71,8 +71,10 @@ class ToolParamCheckMiddleware(Middleware):
             call: ToolCall,
             next_call: Callable[[], Awaitable[str]],
     ) -> str:
-        # 校验入参
-        tool = get_tool_registry().get(call.name)
+        # 校验入参：子 agent 上下文（ctx.tool_registry 白名单）优先，否则全局注册表。
+        # 白名单物理落地——子 agent 即使 prompt 诱导也解析不到白名单外工具。
+        registry = ctx.tool_registry or get_tool_registry()
+        tool = registry.get(call.name)
         if tool is None:
             raise LlmError(f"未知工具：{call.name}")
         call.resolved_tool = tool

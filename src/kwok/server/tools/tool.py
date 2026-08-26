@@ -104,6 +104,14 @@ class Tool(ABC):
         """子工具执行入口（runner 在 to_thread 里调用）。"""
         raise NotImplementedError
 
+    async def execute_async(self, args: dict[str, Any]) -> dict[str, Any]:
+        """async 执行路径（默认走 to_thread 的同步 execute）。
+
+        需要事件循环内协作的工具（如 spawn_agent 派生子循环）覆写此方法；
+        runner 检测到覆写时直接在事件循环内 await，否则走 to_thread(execute)。
+        """
+        raise NotImplementedError
+
 
 def schema_from_pydantic(model: type[BaseModel]) -> dict[str, Any]:
     """pydantic 模型类 → 干净 JSON Schema dict（递归去掉 title 噪音）。"""

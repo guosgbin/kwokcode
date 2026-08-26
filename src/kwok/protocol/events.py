@@ -25,6 +25,8 @@ class EventType(StrEnum):
     PERMISSION_DENIED = "permission.denied"
     CONTEXT_COMPACT_START = "context.compact_start"
     CONTEXT_COMPACTED = "context.compacted"
+    SUBAGENT_STARTED = "subagent.started"
+    SUBAGENT_FINISHED = "subagent.finished"
 
 
 class BaseEvent(BaseModel):
@@ -151,6 +153,20 @@ class ContextCompactedEvent(BaseEvent):
     kept_recent_turns: int
 
 
+class SubagentStartedEvent(BaseEvent):
+    type: Literal[EventType.SUBAGENT_STARTED] = EventType.SUBAGENT_STARTED
+    child_turn_id: str
+    parent_turn_id: str
+    description: str
+
+
+class SubagentFinishedEvent(BaseEvent):
+    type: Literal[EventType.SUBAGENT_FINISHED] = EventType.SUBAGENT_FINISHED
+    child_turn_id: str
+    parent_turn_id: str
+    status: Literal["success", "failed", "cancelled"]
+
+
 Event = (LLMChunkEvent
          | LLMUsageEvent
          | TurnErrorEvent
@@ -166,5 +182,7 @@ Event = (LLMChunkEvent
          | PermissionDeniedEvent
          | ContextCompactStartEvent
          | ContextCompactedEvent
+         | SubagentStartedEvent
+         | SubagentFinishedEvent
          )
 EVENT_ADAPTER: TypeAdapter[Event] = TypeAdapter(Event)

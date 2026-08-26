@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kwok.config import get_config
 from kwok.server.event import EventBusManager
+
+if TYPE_CHECKING:
+    from kwok.server.tools.registry import ToolRegistry
 
 _BASE_SYSTEM_PROMPT = """
 你是Kwok‑Code，本地交互式编程代理，协助用户完成软件工程任务。
@@ -51,6 +54,7 @@ class LlmContext:
     project_ctx: str = ""
     session_dir: str = ""
     context_pct: float = 0.0
+    tool_registry: ToolRegistry | None = None
 
     def system_prompt(self) -> str:
         """返回当前 run 的 system prompt。
@@ -59,6 +63,8 @@ class LlmContext:
         空小节跳过——skill 提示词与记忆注入互不冲突。
         """
         text = self.skill_prompt.strip() or _BASE_SYSTEM_PROMPT
+        # 子 agent 冷启动：global_ctx/project_ctx/project_memory_idx 均不注入（隔离），
+        # 空小节在下方自然跳过；tool_registry 子集约束由 ToolParamCheckMiddleware 物理执行。
         if self.global_ctx.strip():
             text += "\n\n## Global Context\n" + self.global_ctx
         if self.project_ctx.strip():
