@@ -7,6 +7,7 @@ from kwok.protocol.events import (
     BaseEvent,
     EventType,
     LLMChunkEvent,
+    LLMReasoningChunkEvent,
     LLMUsageEvent,
     ServerStatusEvent,
     StepFinishEvent,
@@ -49,10 +50,32 @@ class EventHandlerManager:
 
 event_mgr = EventHandlerManager()
 
+# 思考段状态：为真表示当前正在输出 dim 思考段，正文/工具/轮次结束时复位
+_reasoning_active: bool = False
+
+
+def _end_reasoning() -> None:
+    """结束思考段：复位 dim 换行（幂等）。"""
+    global _reasoning_active
+    if _reasoning_active:
+        print("\x1b[0m\n", end="", flush=True)
+        _reasoning_active = False
+
+
+@event_mgr.register(EventType.LLM_REASONING_CHUNK)
+async def on_reasoning_chunk(event: BaseEvent) -> None:
+    assert isinstance(event, LLMReasoningChunkEvent)
+    global _reasoning_active
+    if not _reasoning_active:
+        print("\x1b[2m[思考] ", end="", flush=True)
+        _reasoning_active = True
+    print(event.delta, end="", flush=True)
+
 
 @event_mgr.register(EventType.LLM_CHUNK)
 async def on_chat_chunk(event: BaseEvent) -> None:
     assert isinstance(event, LLMChunkEvent)
+    _end_reasoning()
     print(event.delta, end="", flush=True)
 
 
@@ -75,12 +98,14 @@ async def on_turn_start(event: BaseEvent) -> None:
 @event_mgr.register(EventType.TURN_FINISH)
 async def on_turn_finish(event: BaseEvent) -> None:
     assert isinstance(event, TurnFinishEvent)
+    _end_reasoning()
     print(f"[turn] {event.turn_id} 对话结束")
 
 
 @event_mgr.register(EventType.TURN_ERROR)
 async def on_turn_error(event: BaseEvent) -> None:
     assert isinstance(event, TurnErrorEvent)
+    _end_reasoning()
     print(
         f"[{event.type}] {event.turn_id} "
         f"对话异常, code={event.code}, message={event.message}"
@@ -105,6 +130,7 @@ async def on_step_finish(event: BaseEvent) -> None:
 @event_mgr.register(EventType.TOOL_CALL_START)
 async def on_tool_call_start(event: BaseEvent) -> None:
     assert isinstance(event, ToolCallStartEvent)
+    _end_reasoning()
     print(f"[tool] {event.name} 开始")
 
 

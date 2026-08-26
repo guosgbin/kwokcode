@@ -5,6 +5,7 @@ from kwok.protocol.events import (
     ContextCompactedEvent,
     ContextCompactStartEvent,
     LLMChunkEvent,
+    LLMReasoningChunkEvent,
     LLMUsageEvent,
     ServerStatusEvent,
     StepFinishEvent,
@@ -30,9 +31,11 @@ class EventRenderer:
         if isinstance(event, TurnStartEvent):
             self._state.turn_in_flight = True
         elif isinstance(event, TurnFinishEvent):
+            await self._transcript.close_reasoning()
             await self._transcript.finish_assistant()
             self._state.turn_in_flight = False
         elif isinstance(event, TurnErrorEvent):
+            await self._transcript.close_reasoning()
             await self._transcript.finish_assistant()
             self._state.turn_in_flight = False
             self._transcript.add_error(f"turn {event.turn_id} 错误 [{event.code}]：{event.message}")
@@ -41,7 +44,11 @@ class EventRenderer:
         elif isinstance(event, StepFinishEvent):
             pass
         elif isinstance(event, LLMChunkEvent):
+            # 正文首个 chunk 前关闭思考块（幂等：后续 chunk 为 no-op）
+            await self._transcript.close_reasoning()
             await self._transcript.append_delta(event.delta)
+        elif isinstance(event, LLMReasoningChunkEvent):
+            await self._transcript.append_reasoning(event.delta)
         elif isinstance(event, LLMUsageEvent):
             self._state.tokens_in += event.input_tokens
             self._state.tokens_out += event.output_tokens
@@ -49,7 +56,8 @@ class EventRenderer:
             self._state.tokens_total += event.total_tokens
             self._state.context_pct = event.context_pct
         elif isinstance(event, ToolCallStartEvent):
-            # 关闭当前流式块，让工具块插入推理文本与最终答案之间（对标 Claude Code）
+            # 关闭当前思考块与流式块，让工具块插入思考与最终答案之间（对标 Claude Code）
+            await self._transcript.close_reasoning()
             await self._transcript.finish_assistant()
             self._transcript.add_tool(event.tool_call_id, event.name, event.arguments)
         elif isinstance(event, ToolCallFinishEvent):

@@ -48,6 +48,8 @@ class LlmConfig:
     model: str = _DEFAULT_LLM_MODEL
     timeout: float = _DEFAULT_LLM_TIMEOUT
     max_tokens: int = _DEFAULT_MAX_TOKENS
+    # 仅配置后才传 reasoning_effort（不改变默认请求行为）
+    reasoning_effort: str | None = None
 
 
 @dataclass
@@ -150,6 +152,9 @@ def _get_config_from_env(config: KwokConfig) -> None:
     config.llm.api_key = _env_str_opt("OPENAI_API_KEY", config.llm.api_key)
     config.llm.base_url = _env_str_opt("OPENAI_BASE_URL", config.llm.base_url)
     config.llm.max_tokens = _env_int("KWOK_LLM_MAX_TOKENS", config.llm.max_tokens)
+    config.llm.reasoning_effort = _env_str_opt(
+        "KWOK_LLM_REASONING_EFFORT", config.llm.reasoning_effort
+    )
 
     config.compaction.tool_result_limit = _env_int(
         "KWOK_COMPACTION_TOOL_RESULT_LIMIT", config.compaction.tool_result_limit

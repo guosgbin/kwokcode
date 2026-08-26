@@ -6,7 +6,7 @@ from rich.markup import escape
 from rich.rule import Rule
 from textual.containers import VerticalScroll
 from textual.timer import Timer
-from textual.widgets import Markdown, Static
+from textual.widgets import Collapsible, Markdown, Static
 from textual.widgets.markdown import MarkdownStream
 
 from kwok.tui.diff_render import render_diff
@@ -56,6 +56,9 @@ class Transcript(VerticalScroll):
         super().__init__(*args, **kwargs)
         self._stream: MarkdownStream | None = None
         self._tool_blocks: dict[str, tuple[Static, str, str]] = {}
+        self._reasoning: Collapsible | None = None
+        self._reasoning_static: Static | None = None
+        self._reasoning_text: list[str] = []
         self._compact: Static | None = None
         self._compact_prefix: str = ""
         self._compact_dots: int = 0
@@ -154,6 +157,31 @@ class Transcript(VerticalScroll):
     async def finish_assistant(self) -> None:
         await self._close_stream()
 
+    # ---- 思考块（dim/italic 可折叠，正文之前） ----
+
+    async def append_reasoning(self, delta: str) -> None:
+        """把思考增量追加进可折叠块；首个增量创建 Collapsible（自动展开）。"""
+        if self._reasoning is None:
+            self._reasoning_text = []
+            self._reasoning_static = Static("", classes="reasoning-content")
+            self._reasoning = Collapsible(
+                self._reasoning_static, title="💭 思考过程", classes="reasoning"
+            )
+            self._reasoning.collapsed = False
+            self.mount(self._reasoning)
+        self._reasoning_text.append(delta)
+        assert self._reasoning_static is not None
+        self._reasoning_static.update(
+            f"[dim italic]{escape(''.join(self._reasoning_text))}[/dim italic]"
+        )
+        self.scroll_end(animate=False)
+
+    async def close_reasoning(self) -> None:
+        """关闭当前思考块：保留已完成内容（可继续折叠查看），为正文/工具让位。"""
+        self._reasoning = None
+        self._reasoning_static = None
+        self._reasoning_text = []
+
     # ---- 工具块 ----
 
     def add_tool(self, tool_call_id: str, name: str, arguments: str) -> None:
@@ -205,3 +233,6 @@ class Transcript(VerticalScroll):
         self.remove_children()
         self._tool_blocks.clear()
         self._stream = None
+        self._reasoning = None
+        self._reasoning_static = None
+        self._reasoning_text = []

@@ -85,6 +85,10 @@ class KwokTuiApp(App[None]):
         margin-left: 2;
         margin-right: 2;
     }
+    #transcript .reasoning {
+        margin-left: 2;
+        margin-right: 2;
+    }
     #input {
         height: auto;
         max-height: 40%;

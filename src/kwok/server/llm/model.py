@@ -30,6 +30,7 @@ class LlmResponse:
     stop_reason: StopReason
     tool_calls: list[ToolCall] = field(default_factory=list)
     text: str = ""
+    reasoning: str = ""  # 本次模型调用的完整思考
 
 
 @dataclass(frozen=True)

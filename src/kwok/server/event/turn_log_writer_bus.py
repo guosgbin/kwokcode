@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
-from kwok.protocol.events import BaseEvent
+from kwok.protocol.events import BaseEvent, LLMReasoningChunkEvent
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,8 @@ class TurnLogWriterBus:
 
     async def on_event(self, event: BaseEvent) -> None:
 
+        if isinstance(event, LLMReasoningChunkEvent):
+            return  # 思考不落盘（FR-010）：父/子 turn writer 同源覆盖
         if getattr(event, "turn_id", None) != self._turn_id:
             return
         line = json.dumps({"ts": _now_iso(), **event.model_dump()}, ensure_ascii=False)

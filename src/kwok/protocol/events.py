@@ -16,6 +16,7 @@ class EventType(StrEnum):
     STEP_FINISH = "step.finish"
     LLM_CHUNK = "llm.chunk"
     LLM_USAGE = "llm.usage"
+    LLM_REASONING_CHUNK = "llm.reasoning_chunk"
     TOOL_CALL_START = "tool.call.start"
     TOOL_CALL_FINISH = "tool.call.finish"
     CHAT_DONE = "chat.done"
@@ -85,6 +86,14 @@ class ToolCallFinishEvent(BaseEvent):
 
 class LLMChunkEvent(BaseEvent):
     type: Literal[EventType.LLM_CHUNK] = EventType.LLM_CHUNK
+    turn_id: str
+    delta: str
+
+
+class LLMReasoningChunkEvent(BaseEvent):
+    """模型思考增量（reasoning / thinking）：不落盘、不回传模型，仅内存展示。"""
+
+    type: Literal[EventType.LLM_REASONING_CHUNK] = EventType.LLM_REASONING_CHUNK
     turn_id: str
     delta: str
 
@@ -168,6 +177,7 @@ class SubagentFinishedEvent(BaseEvent):
 
 
 Event = (LLMChunkEvent
+         | LLMReasoningChunkEvent
          | LLMUsageEvent
          | TurnErrorEvent
          | ServerStatusEvent
