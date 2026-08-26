@@ -46,7 +46,7 @@ class GrepTool(Tool):
     )
     input_model = GrepParams
     output_model = GrepResult
-    permission_level: PermissionLevel = PermissionLevel.ASK
+    permission_level: PermissionLevel = PermissionLevel.ALLOW
     risk_level: RiskLevel = RiskLevel.READONLY
     category = ToolCategory(business_type="file", read_write=ReadWrite.READ)
     timeout = _GREP_TIMEOUT

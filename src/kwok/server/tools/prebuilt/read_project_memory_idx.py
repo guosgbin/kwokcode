@@ -31,7 +31,7 @@ class ReadProjectMemoryIdxTool(Tool):
     description = "读取当前项目的记忆索引文件 MEMORY.md，返回所有已保存的记忆条目列表。"
     input_model = ReadProjectMemoryIdxParams
     output_model = ReadProjectMemoryIdxResult
-    permission_level: PermissionLevel = PermissionLevel.ASK
+    permission_level: PermissionLevel = PermissionLevel.ALLOW
     category = ToolCategory(business_type="memory", read_write=ReadWrite.READ)
     risk_level = RiskLevel.READONLY
 

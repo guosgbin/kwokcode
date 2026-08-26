@@ -32,7 +32,7 @@ class ReadProjectMemoryTool(Tool):
     description = "读取指定名称的项目记忆文件内容，name 参数为记忆名（不含 .md 后缀）。"
     input_model = ReadProjectMemoryParams
     output_model = ReadProjectMemoryResult
-    permission_level: PermissionLevel = PermissionLevel.ASK
+    permission_level: PermissionLevel = PermissionLevel.ALLOW
     category = ToolCategory(business_type="memory", read_write=ReadWrite.READ)
     risk_level = RiskLevel.READONLY
 

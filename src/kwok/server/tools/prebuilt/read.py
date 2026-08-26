@@ -30,7 +30,7 @@ class ReadFileTool(Tool):
     description = "读取指定路径的本地文本文件内容并返回。支持 offset/limit 分页读取大文件。"
     input_model = ReadFileParams
     output_model = ReadFileResult
-    permission_level: PermissionLevel = PermissionLevel.ASK
+    permission_level: PermissionLevel = PermissionLevel.ALLOW
 
 
     def execute(self, args: dict[str, Any]) -> dict[str, Any]:
