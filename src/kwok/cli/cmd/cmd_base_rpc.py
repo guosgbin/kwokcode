@@ -42,7 +42,7 @@ async def run(method: Method, port: int) -> int:
             result = await client.call(req_cls())
     except RpcConnectionError as exc:
         print(f"错误：{exc}", file=sys.stderr)
-        print("提示：kwok-server 可能未运行，请先启动 `kwok-server`。", file=sys.stderr)
+        print("提示：kwok-server 可能未运行，请先启动 `kwok server start`。", file=sys.stderr)
         return 1
     except RpcError as exc:
         print(f"错误（{exc.code}）：{exc.message}", file=sys.stderr)

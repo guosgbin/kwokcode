@@ -65,7 +65,7 @@ async def run_interactive(port: int, timeout: float) -> int:
 
     except RpcConnectionError as exc:
         print(f"错误：{exc}", file=sys.stderr)
-        print("提示：kwok-server 可能未运行，请先启动。", file=sys.stderr)
+        print("提示：kwok-server 可能未运行，请先启动 `kwok server start`。", file=sys.stderr)
         return 1
 
     return exit_code

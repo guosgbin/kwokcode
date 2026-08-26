@@ -13,10 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-kwok-server = "kwok.server.main:main"
-kwok-cli = "kwok.cli.main:main"
-kwok = "kwok.tui.main:main"
-kwok-tui = "kwok.tui.main:main"
+kwok = "kwok.main:main"
 
 [dependency-groups]
 dev = [
