@@ -11,10 +11,11 @@ from kwok.net.server import SocketServer
 from kwok.server.cmd_handlers import EventHandlerManager
 from kwok.server.event import init_event_system
 from kwok.server.llm import LlmProvider, build_provider
+from kwok.server.mcp import McpServerManager, load_mcp_config
 from kwok.server.permissions import PermissionManager, init_permissions
 from kwok.server.session import SessionManager, SessionStore
 from kwok.server.subagent import get_task_registry, init_subagent_system
-from kwok.server.tools import init_tool_registry
+from kwok.server.tools import get_tool_registry, init_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class KwokApp:
         self._provider = provider
         self._start_time = time.monotonic()
         self._permissions: PermissionManager | None = None
+        self._mcp: McpServerManager | None = None
 
     async def start(self) -> None:
         config = init_config()
@@ -33,6 +35,11 @@ class KwokApp:
         self._provider = build_provider(config)
         store = SessionStore(config.projects_dir)
         init_tool_registry(store)
+        # MCP 挂载：启动时发现一次 + 注册进全局 registry（FR-018；不得每轮重注册，plan D7）
+        config.mcp = load_mcp_config()
+        self._mcp = McpServerManager()
+        await self._mcp.start_all(config.mcp.servers)
+        self._mcp.register_tools(get_tool_registry())
         self._permissions = init_permissions()
         assert self._provider is not None
         init_subagent_system(self._provider)
@@ -89,4 +96,6 @@ class KwokApp:
         finally:
             if self._permissions is not None:
                 self._permissions.shutdown()
+            if self._mcp is not None:
+                await self._mcp.stop_all()  # 关闭全部 MCP client（无残留子进程，FR-014）
             self._sessions.close_all()

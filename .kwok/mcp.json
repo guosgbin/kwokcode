@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "demo_mcp": {
+      "transport": "stdio",
+      "command": "/Users/dylankwok/dylankwok/GoLandProject/demo_mcp/demo_mcp"
+    }
+  }
+}

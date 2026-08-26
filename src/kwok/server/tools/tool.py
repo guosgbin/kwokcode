@@ -104,11 +104,12 @@ class Tool(ABC):
         """子工具执行入口（runner 在 to_thread 里调用）。"""
         raise NotImplementedError
 
-    async def execute_async(self, args: dict[str, Any]) -> dict[str, Any]:
+    async def execute_async(self, args: dict[str, Any]) -> dict[str, Any] | str:
         """async 执行路径（默认走 to_thread 的同步 execute）。
 
         需要事件循环内协作的工具（如 spawn_agent 派生子循环）覆写此方法；
         runner 检测到覆写时直接在事件循环内 await，否则走 to_thread(execute)。
+        返回 str 时 runner 直接作为工具结果透传（如 McpTool 拼接 text 返回）。
         """
         raise NotImplementedError
 

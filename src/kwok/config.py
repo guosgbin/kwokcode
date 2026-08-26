@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from typing import Literal
 
 from load_dotenv import load_dotenv  # type: ignore[import-untyped]
 
@@ -71,6 +72,26 @@ class PermissionConfig:
 
 
 @dataclass
+class McpServerConfig:
+    """单个 MCP 服务器连接配置。transport 决定命令型（stdio）或远程（http）。"""
+
+    name: str
+    transport: Literal["stdio", "http"] = "stdio"
+    command: str | None = None
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] | None = None
+    cwd: str | None = None
+    url: str | None = None
+
+
+@dataclass
+class McpConfig:
+    """MCP 服务器列表（来自全局 ~/.kwok/mcp.json 与项目本地 .kwok/mcp.json 双层叠加）。"""
+
+    servers: list[McpServerConfig] = field(default_factory=list)
+
+
+@dataclass
 class KwokConfig:
     host: str = _DEFAULT_HOST
     port: int = _DEFAULT_PORT
@@ -81,6 +102,7 @@ class KwokConfig:
     llm: LlmConfig = field(default_factory=LlmConfig)
     permission: PermissionConfig = field(default_factory=PermissionConfig)
     compaction: CompactionConfig = field(default_factory=CompactionConfig)
+    mcp: McpConfig = field(default_factory=McpConfig)
 
 
 def _env_str(name: str, default: str) -> str:
