@@ -4,51 +4,62 @@
 
 类似 Claude Code，完全本地实现，用于在终端完成代码阅读、修改、调试、项目重构。
 
-## 特性
+## ✨ 特性
 
-- 终端交互式会话，流式大模型输出 + 思考过程（reasoning）实时展示
-- Skill 技能系统：可扩展自定义技能，隔离工具白名单
-- Sub-agent 协作：`spawn_agent` 派生隔离子代理，Planner / Reviewer / Implementer 内置角色，支持后台任务
-- MCP（Model Context Protocol）接入：外部 MCP 服务端工具注入为普通工具
-- TCP JSON-RPC 2.0 服务端/客户端分离架构（daemon 后台常驻）
-- 异步事件总线：会话事件、LLM 流、工具调用全链路事件推送
-- 会话持久化：会话记录、项目级记忆、会话级记忆
-- 命令行子命令：`prompt` / `interactive` / `ping` / `version`
-- NDJSON 结构化日志，区分控制台人类可读格式 / JSON 机器格式
+- 🖥️ 终端交互式会话，流式大模型输出 + 思考过程（reasoning）实时展示
+- 🧩 Skill 技能系统：可扩展自定义技能，隔离工具白名单
+- 🤖 Sub-agent 协作：spawn_agent 派生隔离子代理，Planner / Reviewer / Implementer 内置角色，支持后台任务
+- 🔌 MCP 接入：外部 MCP 服务端工具注入为普通工具
+- 🛡️ 工具管控：Bash 黑名单、文件读写保护、权限审批链
+- 📝 会话持久化：会话记录、项目级记忆、会话级记忆
+- ⚙️ 层级配置：~/.kwok/setting.json → .env → 环境变量
+- 📡 TCP JSON-RPC 2.0 服务端/客户端分离架构（daemon 后台常驻）
+- 📜 NDJSON 结构化日志，区分控制台人类可读格式 / JSON 机器格式
 
+## 架构设计
+![architecture.png](./docs/img/architecture.png)
+
+## 代理循环
+![reAct.png](docs/img/reAct.png)
+
+当您给 KwokCode 一个任务，它会进入一个代理循环：收集上下文 → 采取行动 → 验证结果 → 重复，直到完成。
+
+您的提示经 kwok 入口、TCP + JSON-RPC 送到常驻 daemon。服务端的 Agent Loop 把输入、会话历史、项目记忆和压缩摘要组装成上下文，交给 LLM 流式生成。模型推理，工具行动——读文件、跑 Bash、改代码，每次调用都穿过权限审批、参数校验、事件广播的切面，结果回填上下文，供下一步决策。
+
+循环按任务自适应：问代码只需一次收集，修 Bug 会反复穿越，重构涉及大范围验证。工具结果被压缩截断回填，模型基于前一步所学链式执行并沿途纠正。
+
+您随时可以中断引导。面对复杂任务，它会用 spawn_agent 派生隔离子代理（Planner/Reviewer/Implementer）分工执行，或通过 /skill 斜杠命令收缩工具范围完成专项任务。安全是一条贯穿全局的约束线：Bash 黑名单、写前必读、敏感操作走审批。
 ## 快速开始
 
 ```bash
-# 安装依赖
-pip install -e .
+# 安装依赖（项目用 uv 管理）
+uv sync
 
-# 启动守护进程
-kwok server start
+# 首次：后台启动守护进程
+uv run kwok server start
 
 # 进入交互式会话
-kwok interactive
+uv run kwok
 
 # 或直接提问
-kwok prompt "解释一下 src/kwok/server/session/manager.py 的架构"
+uv run kwok prompt "解释一下 src/kwok/server/session/manager.py 的架构"
 ```
 
 ## 命令行使用
 
-### interactive 交互模式
+### 交互式会话（TUI，默认）
+
+```bash
+kwok
+```
+
+### interactive 文本交互
 
 ```bash
 kwok interactive
 ```
 
-进入 TUI 交互式会话，支持：
-
-- `Enter` 发送消息
-- `Ctrl+J` 换行
-- `↑/↓` 浏览历史
-- `Ctrl+Y` 复制选中文本
-- `/compact` 压缩上下文
-- `/skill_name <args>` 触发 Skill
-- 思考过程实时展示（reasoning 模型，如 DeepSeek-R1）
+无 TUI 依赖的纯文本交互模式（`input()` 逐行），适合脚本/极简终端。
 
 ### prompt 单次提问
 
@@ -229,38 +240,7 @@ EOF
 
 在 `send_message()` 时自动加载，注入到 system prompt 的记忆层。
 
-## 架构说明
-
-### 守护进程与客户端分离
-
-```
-┌─────────────┐     TCP (127.0.0.1:6456)     ┌──────────────┐
-│  kwok-cli   │ ◄──────────────────────────► │  kwok-server │
-│  kwok-tui   │     JSON-RPC 2.0 / NDJSON    │  (daemon)    │
-└─────────────                              └──────────────┘
-```
-
-- **kwok-server**：后台常驻守护进程，持有 LLM 连接、工具注册表、会话状态
-- **kwok-cli / kwok-tui**：轻量客户端，通过 TCP 与 server 通信
-
-### JSON-RPC 2.0 IPC 通信
-
-协议方法：
-
-| Method | 说明 |
-|--------|------|
-| `ping` | 连通性测试 |
-| `version` | 获取服务端版本 |
-| `prompt` | 发起对话 |
-| `session.create` | 创建新会话 |
-| `session.prompt` | 发送消息 |
-| `session.close` | 关闭会话 |
-| `session.compact` | 压缩上下文 |
-| `event.subscribe` | 订阅事件流 |
-| `event.unsubscribe` | 取消订阅 |
-| `permission.respond` | 回复权限审批 |
-
-### 事件总线 EventBus 设计
+## 事件总线
 
 ```
 Server Event → EventBusManager → ClientEventPush → TCP → TUI/CLI
@@ -270,40 +250,48 @@ Server Event → EventBusManager → ClientEventPush → TCP → TUI/CLI
 - 客户端通过 `event.subscribe` 订阅感兴趣的事件类型
 - 支持按模式过滤（如 `turn.*`、`tool.**`）
 
-### 项目目录结构
+## 切面中间件
+
+![middleware.png](docs/img/middleware.png)
+
+中间件是包裹在模型与工具调用外围的责任链，让每类横切关注点（事件、校验、审批）在不侵入 Agent Loop 与工具实现的前提下集中表达。中间件通过 `tool_order` / `model_order` 控制执行顺序，对外暴露 `around_tool` / `around_model` 钩子，内部拆分为 `_before_*` / `_after_*`。
 
 ```
-src/kwok/
-├── cli/                  # 命令行客户端
-│   ├── arg_parser.py     # 子命令定义
-│   ├── cmd/              # 命令实现（prompt/interactive/ping/version）
-│   └── main.py           # CLI 入口
-├── tui/                  # TUI 终端界面
-│   ├── app.py            # 主应用
-│   ├── client.py         # TUI 客户端
-│   ├── renderer.py       # 事件渲染器
-│   └── widgets/          # UI 组件（输入面板、命令弹层、转录区等）
-├── server/               # 服务端核心
-│   ├── main.py           # Server 入口
-│   ├── session/          # 会话管理
-│   ├── skill/            # Skill 系统
-│   ├── subagent/         # Sub-agent 协作（角色加载/运行/后台任务）
-│   ├── mcp/              # MCP 外部工具接入
-│   ├── tools/            # 工具注册与实现
-│   ├── event/            # 事件总线
-│   ├── memory/           # 记忆系统
-│   ├── permissions/      # 权限管理
-│   └── llm/              # LLM 调用与流式处理
-├── protocol/             # 协议定义（RPC 模型、事件类型）
-├── net/                  # 网络层（TCP server/client）
-── config.py             # 配置管理
+Agent Loop → around_model / around_tool 链 → 具体工具 / LLM Provider
+                 ↓             ↓
+           按 tool_order 排序串联执行（before → 执行 → after）
 ```
+
+内置中间件（按 `tool_order` 执行，数字越大越靠近实际工具执行）：
+
+| 中间件 | tool_order | 职责 |
+|--------|-----------|------|
+| `ToolEventPushMiddleware` | 0 | 每次工具调用前/后发事件（on_tool_start 等），实现 TUI 实时观测 |
+| `ToolParamCheckMiddleware` | 5 | 参数校验：命中校验规则时回滚副作用并返回修正指令给模型 |
+| `PermissionMiddleware` | 10 | 权限审批：黑名单拦截、审批请求、读-写保护判定 |
+
+中间件执行顺序是先按 `tool_order` 升序执行各 `_before_*`，再执行工具本体，最后逆序执行 `_after_*`，形成洋葱模型的环绕语义。自定义中间件继承 `Middleware` 并覆写钩子，注册进 `init_middleware_chain()` 即可生效。
 
 ## 配置文件
 
-配置文件路径：`~/.kwok/config.toml`
+### `~/.kwok/setting.json`
 
-也可通过环境变量覆盖：
+主配置文件为 `~/.kwok/setting.json`，结构对齐配置树，只写需要覆盖的字段即可：
+
+```json
+{
+  "port": 6456,
+  "llm": { "model": "gpt-4o-mini", "api_key": "sk-...", "base_url": "..." },
+  "permission": { "timeout_s": 60.0 },
+  "compaction": { "auto_threshold": 0.0 }
+}
+```
+
+**加载优先级（低 → 高）**：内置默认值 → `~/.kwok/setting.json` → `.env` → 进程环境变量。JSON 设基础值，临时覆盖（如切换模型 / Key）用环境变量。
+
+> `mcp` 服务端列表不在此配置，走独立的 `~/.kwok/mcp.json` 双层叠加。
+
+### 环境变量覆盖
 
 | 环境变量 | 说明 | 默认值 |
 |----------|------|--------|
@@ -315,49 +303,11 @@ src/kwok/
 | `OPENAI_MODEL` | LLM 模型名 | `gpt-4o-mini` |
 | `KWOK_LLM_TIMEOUT` | LLM 调用超时（秒） | `60.0` |
 | `KWOK_LLM_REASONING_EFFORT` | 推理力度（如 low/medium/high） | 未设置（不改默认请求行为） |
+| `KWOK_MAX_TOKENS` | 单次请求最大 token 数 | `8192` |
 | `KWOK_MAX_STEPS` | 单 turn 最大步骤数 | `20` |
 | `KWOK_LOG_LEVEL` | 日志级别 | `INFO` |
 | `KWOK_LOG_FILE` | 日志文件路径 | `~/.kwok/logs/core.log` |
 | `KWOK_LOG_FORMAT` | 日志格式（text/json） | `text` |
-
-## 开发 & 调试
-
-### 本地运行
-
-```bash
-# 直接启动 server（非 daemon 模式，便于调试）
-python -m kwok.server.main
-
-# 启动 TUI
-python -m kwok.tui.main
-```
-
-### 日志查看
-
-```bash
-# 实时查看日志
-tail -f ~/.kwok/logs/core.log
-
-# JSON 格式日志（便于机器解析）
-KWOK_LOG_FORMAT=json kwok server start
-```
-
-### PID 文件与服务启停
-
-```bash
-# 查看 PID
-cat ~/.kwok/kwok-server-6456.pid
-
-# 手动停止
-kill $(cat ~/.kwok/kwok-server-6456.pid)
-```
-
-### 调试 JSON-RPC 报文
-
-```bash
-# 直接发送 RPC 请求
-echo '{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}' | nc 127.0.0.1 6456
-```
 
 ## 已知限制
 
@@ -366,3 +316,9 @@ echo '{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}' | nc 127.0.0.1 6456
 - 工具白名单收缩时，未注册的工具名被安全忽略（无报错）
 - 子 agent 最多一层嵌套（子 agent 内不可再派生）
 - 思考过程（reasoning）仅内存展示：不落盘、不回传模型
+
+## TODO-list
+- [ ] 支持 trace 链路追踪
+- [ ] 支持扁平 `name.md` 技能文件
+- [ ] 支持会话回放
+- [ ] 支持切换模型

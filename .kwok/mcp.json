@@ -2,7 +2,7 @@
   "mcpServers": {
     "demo_mcp": {
       "transport": "stdio",
-      "command": "/Users/dylankwok/dylankwok/GoLandProject/demo_mcp/demo_mcp"
+      "command": "/Users/dylankwok/PycharmProject/PythonProject/KwokCode/.kwok/demo_mcp"
     }
   }
 }

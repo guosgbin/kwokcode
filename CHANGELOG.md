@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-26
+
+### Added
+
+- 新增 Skill 技能系统：可扩展自定义技能，隔离工具白名单，支持 `/skill_name <args>` 触发
+- 新增 Sub-agent 协作系统：`spawn_agent` 派生隔离子代理，支持 Planner / Reviewer / Implementer 内置角色与后台任务
+- 新增 MCP 工具接入：支持外部 MCP 服务端工具注入为普通工具（stdio / Streamable HTTP 传输）
+- 新增 `~/.kwok/setting.json` 层级配置（setting.json → `.env` → 环境变量）
+- TUI 支持模型思考过程（reasoning）实时展示
+
+### Changed
+
+- 命令入口统一为 `kwok`
+- MCP 服务端列表从 setting.json 拆分为独立的 `~/.kwok/mcp.json` 双层叠加
+
 ## [0.4.0] - 2026-08-25
 
 ### Added

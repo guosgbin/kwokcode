@@ -1,6 +1,6 @@
 [project]
 name = "kwokcode"
-version = "0.1.0"
+version = "0.5.0"
 description = "手撸一个 Code 智能体"
 requires-python = ">=3.12"
 dependencies = [
