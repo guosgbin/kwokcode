@@ -4,6 +4,18 @@
 
 类似 Claude Code，完全本地实现，用于在终端完成代码阅读、修改、调试、项目重构。
 
+> ⚠️  iTerm2 终端中文输入兼容说明<br><br>
+使用 iTerm2 运行本 TUI 程序时，中文输入法无法正常输入、拼音候选词失效、组合字符丢失，是 iTerm2 自身兼容性缺陷导致，并非项目 Bug。<br>
+该问题为上游终端兼容性问题，已被 Textual 官方收录：https://github.com/textualize/textual/issues/6561<br><br>
+> 其他终端地址
+> - Kitty: https://github.com/kovidgoyal/kitty
+> - WezTerm: https://github.com/wez/wezterm
+> - Alacritty: https://github.com/alacritty/alacritty
+> - Ghostty: https://github.com/ghostty-org/ghostty
+
+
+## 展示
+![img.png](docs/img/img.png)
 ## ✨ 特性
 
 - 🖥️ 终端交互式会话，流式大模型输出 + 思考过程（reasoning）实时展示

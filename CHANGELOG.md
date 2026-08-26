@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-08-26
+
+### Changed
+
+- 只读工具（read / grep / read_project_memory / read_project_memory_idx）默认权限由需审批改为直接放行（ASK → ALLOW）
+- README 补充架构图与中间件说明
+- 事件按连接定向投递：会话事件只投递到所属连接，实现跨会话隔离；全局事件（server.status）仍广播
+
 ## [0.5.0] - 2026-08-26
 
 ### Added

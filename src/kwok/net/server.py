@@ -11,6 +11,7 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 import kwok
+from kwok.protocol.context import connection_id_var
 from kwok.protocol.enums import ErrorCode
 from kwok.protocol.errors import InvalidParamsError, LlmError, UnknownMethodError
 from kwok.protocol.events import ServerStatusEvent
@@ -112,6 +113,9 @@ class SocketServer:
             await write_message(writer, EventFrame(event=method, params=params))
 
         self._bus.attach(connection_id, send_event)
+        # 连接级上下文：随 create_task 传播到该连接全部请求/turn/子任务，
+        # 事件推送据此按连接定向投递（跨会话事件不再广播给其它连接）。
+        ctx_token = connection_id_var.set(connection_id)
         # 每条命令独立 task 执行（FR-008），写回按每连接锁串行化保证 NDJSON 帧原子（FR-009）
         write_lock = asyncio.Lock()
         tasks: set[asyncio.Task[None]] = set()
@@ -151,6 +155,7 @@ class SocketServer:
                     await task
             self._writers.discard(writer)
             self._bus.detach(connection_id)
+            connection_id_var.reset(ctx_token)
             if self._on_disconnect is not None:
                 self._on_disconnect(connection_id)
             writer.close()
