@@ -13,10 +13,10 @@ class AgentLoader:
     角色目录布局：`<dir>/<name>.md`。三级目录：
         1. <cwd>/.kwok/subagent/      （项目本地）
         2. ~/.kwok/subagent/          （用户全局）
-        3. 包内 builtin/              （内建兜底）
+        3. 包内 prebuilt/              （内建兜底）
     """
 
-    _BUILTIN_DIR = Path(__file__).resolve().parent / "builtin"
+    _BUILTIN_DIR = Path(__file__).resolve().parent / "prebuilt"
 
     @classmethod
     def _search_paths(cls, cwd: str | Path) -> list[Path]:
