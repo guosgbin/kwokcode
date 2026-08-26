@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
-from dataclasses import dataclass, field
-from typing import Literal
+from dataclasses import dataclass, field, fields, is_dataclass
+from pathlib import Path
+from typing import Any, Literal
 
 from load_dotenv import load_dotenv  # type: ignore[import-untyped]
 
@@ -14,6 +16,7 @@ _DEFAULT_LOG_LEVEL = "INFO"
 _DEFAULT_LOG_FILE = "~/.kwok/logs/core.log"
 _DEFAULT_LOG_FORMAT = "text"
 _DEFAULT_CONFIG_PATH = "~/.kwok/config.toml"
+_DEFAULT_SETTING_PATH = "~/.kwok/setting.json"
 _DEFAULT_PROJECTS_DIR = "~/.kwok/projects"
 
 _DEFAULT_MAX_STEPS = 20
@@ -129,11 +132,15 @@ _CONFIG: KwokConfig | None = None
 
 
 def init_config() -> KwokConfig:
-    """进程级配置快照：读 .env + 解析环境变量，只执行一次（幂等）。"""
+    """进程级配置快照：默认值 → ~/.kwok/setting.json → .env → 进程环境变量。
+
+    仅执行一次（幂等）。优先级从低到高：内置默认值 < setting.json < env。
+    """
     global _CONFIG
     if _CONFIG is not None:
         return _CONFIG
     config = KwokConfig()
+    _apply_setting_json(config)
     load_dotenv(".env", override=False)
     _get_config_from_env(config)
     _CONFIG = config
@@ -151,6 +158,37 @@ def reset_config() -> None:
     """清空配置快照（测试隔离用）。"""
     global _CONFIG
     _CONFIG = None
+
+
+def _apply_setting_json(config: KwokConfig) -> None:
+    """把 ~/.kwok/setting.json 的字段填进配置（仅在内置默认值之上）。
+
+    文件缺失/非法 JSON → 静默跳过，不阻塞启动。字段结构对齐 KwokConfig 树，
+    未知 key 忽略；嵌套 dataclass（logging/llm/permission/...）递归填充。
+    """
+    path = Path(_DEFAULT_SETTING_PATH).expanduser()
+    if not path.is_file():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, dict):
+        return
+    _fill_dataclass(config, data)
+
+
+def _fill_dataclass(obj: Any, data: dict[str, Any]) -> None:
+    """按 dataclass 字段名从 data 取值填充；嵌套子配置递归，未知 key 跳过。"""
+    for f in fields(obj):
+        if f.name not in data:
+            continue
+        value = data[f.name]
+        current = getattr(obj, f.name)
+        if is_dataclass(current) and isinstance(value, dict):
+            _fill_dataclass(current, value)
+        elif not is_dataclass(current):
+            setattr(obj, f.name, value)
 
 
 def _get_config_from_env(config: KwokConfig) -> None:
