@@ -49,27 +49,6 @@ _TIPS = [
 _DEFAULT_NEWS = ["首次启动，暂无更新记录"]
 
 
-def recent_changelog(limit: int = 8) -> list[str]:
-    """读 CHANGELOG.md 最新版本条目的变更要点；文件缺失时回退默认文案。"""
-    path = Path("CHANGELOG.md")
-    if not path.exists():
-        return list(_DEFAULT_NEWS)
-    bullets: list[str] = []
-    in_latest = False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("## "):
-            if in_latest:
-                break
-            if "[Unreleased]" not in line:
-                in_latest = True
-            continue
-        if in_latest and line.startswith("- "):
-            bullets.append(line[2:].strip())
-            if len(bullets) >= limit:
-                break
-    return bullets or list(_DEFAULT_NEWS)
-
-
 def _info_block(state: UiState) -> list[str]:
     model = state.model or "未配置模型"
     return [
@@ -98,11 +77,14 @@ def _tips_block(changelog: list[str]) -> list[str | Text]:
 
 
 def build_welcome(state: UiState, changelog: list[str] | None = None) -> Group:
-    """构建欢迎横幅：参照 Claude Code 排版——左侧 KWOK/CODE 大 logo 靠左对齐，
-    右侧两行（会话信息 | 使用提示）。
-    """
     if changelog is None:
-        changelog = recent_changelog()
+        changelog = [
+            "新增 Skill 技能系统：可扩展自定义技能，隔离工具白名单，支持 `/skill_name <args>` 触发",
+            "新增 Sub-agent 协作系统：`spawn_agent` 派生隔离子代理",
+            "新增 MCP 工具接入：支持外部 MCP 服务端工具注入为普通工具",
+            "新增 `~/.kwok/setting.json` 层级配置（setting.json → `.env` → 环境变量）",
+            "TUI 支持模型思考过程（reasoning）实时展示"
+        ]
     header = Rule(
         f" [bold {_COL_ACCENT}]KwokCode v{kwok.__version__}[/bold {_COL_ACCENT}] ",
         style="dim",
@@ -115,11 +97,11 @@ def build_welcome(state: UiState, changelog: list[str] | None = None) -> Group:
     tips = _tips_block(changelog)
     table = Table(show_header=False, box=None, padding=(0, 1))
     table.add_column(justify="left", ratio=3, min_width=36)  # 左：logo
-    table.add_column(min_width=5)  # 空间隔列：拉大 logo 与内容列之间的间距
+    table.add_column(min_width=5)
     table.add_column(justify="left", ratio=2, min_width=32)  # 右：信息 + Tips
     table.add_row(logo, "", Group(*info, "", *tips))
     panel = Panel(table, box=box.ROUNDED, border_style="dim", padding=(0, 1))
     return Group(header, panel)
 
 
-__all__ = ["build_welcome", "recent_changelog"]
+__all__ = ["build_welcome"]
