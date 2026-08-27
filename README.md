@@ -16,6 +16,12 @@
 
 ## 展示
 ![img.png](docs/img/img.png)
+
+
+https://github.com/user-attachments/assets/74a18c4f-e113-4a69-a663-4d617872cdb7
+
+
+
 ## ✨ 特性
 
 - 🖥️ 终端交互式会话，流式大模型输出 + 思考过程（reasoning）实时展示
