@@ -12,10 +12,15 @@ from kwok.server.permissions import PermissionManager
 
 
 class PermissionRespondHandler:
-    """permission.respond：回传审批决策，resolve 对应 pending Future。
+    """RPC handler for responding to pending permission approval requests.
 
-    decision 白名单限定为交互决策（allow_once/session_allow/deny_once/session_deny）；
-    auto_*/timeout 仅服务端内部产生，客户端回传即视为非法参数。
+    Receives client approval decisions and resolves the pending permission future.
+    Only interactive decisions defined in INTERACTIVE_DECISIONS are accepted.
+    Auto‑generated or timeout decisions are produced internally by the server and
+    rejected if submitted from a client.
+
+    Args:
+        manager: Manager instance to handle pending permission responses.
     """
 
     def __init__(self, manager: PermissionManager) -> None:
@@ -27,8 +32,8 @@ class PermissionRespondHandler:
         try:
             req = PermissionRespondReq.model_validate({} if params is None else params)
         except ValidationError as exc:
-            raise InvalidParamsError(f"无效审批回传参数: {exc}") from exc
+            raise InvalidParamsError(f"Invalid permission response parameters:: {exc}") from exc
         if req.decision not in INTERACTIVE_DECISIONS:
-            raise InvalidParamsError(f"非法审批决策：{req.decision}")
+            raise InvalidParamsError(f"Illegal permission decision: {req.decision}")
         self._manager.respond(req.tool_use_id, req.decision)
         return PermissionRespondResp(tool_use_id=req.tool_use_id, decision=req.decision)

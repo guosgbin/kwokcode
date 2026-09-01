@@ -9,7 +9,6 @@ import sys
 
 
 def main() -> None:
-    # 无任何参数 → 默认进 TUI（KwokCode 主导体验）
     if len(sys.argv) == 1:
         _enter_tui()
         return

@@ -16,6 +16,11 @@ from kwok.server.session import SessionManager
 
 
 class SessionCreateHandler:
+    """Creates a new interactive session via RPC request.
+
+    Args:
+        sessions: Manager that maintains all session instances and lifecycle logic.
+    """
 
     def __init__(self, sessions: SessionManager) -> None:
         self._sessions = sessions
@@ -24,11 +29,11 @@ class SessionCreateHandler:
             self, params: Any, ctx: RequestContext | None = None
     ) -> SessionCreateResp:
         if ctx is None:
-            raise InvalidParamsError("创建会话需要请求上下文（connection_id）")
+            raise InvalidParamsError("Session creation requires request context (connection_id)")
         try:
             req = SessionCreateReq.model_validate({} if params is None else params)
         except ValidationError as exc:
-            raise InvalidParamsError(f"无效会话创建参数: {exc}") from exc
+            raise InvalidParamsError(f"Invalid session creation parameters: {exc}") from exc
         session = self._sessions.create(
             mode="interactive",
             title="",
@@ -40,6 +45,11 @@ class SessionCreateHandler:
 
 
 class SessionCloseHandler:
+    """Closes an existing session via RPC request.
+
+    Args:
+        sessions: Manager that maintains all session instances and lifecycle logic.
+    """
 
     def __init__(self, sessions: SessionManager) -> None:
         self._sessions = sessions
@@ -48,10 +58,10 @@ class SessionCloseHandler:
             self, params: Any, ctx: RequestContext | None = None
     ) -> SessionCloseResp:
         if ctx is None:
-            raise InvalidParamsError("关闭会话需要请求上下文（connection_id）")
+            raise InvalidParamsError("Session closing requires request context (connection_id)")
         try:
             req = SessionCloseReq.model_validate({} if params is None else params)
         except ValidationError as exc:
-            raise InvalidParamsError(f"无效会话关闭参数: {exc}") from exc
+            raise InvalidParamsError(f"Invalid session closing parameters: {exc}") from exc
         self._sessions.close(req.session_id, ctx.connection_id)
         return SessionCloseResp(session_id=req.session_id)

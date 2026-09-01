@@ -6,8 +6,10 @@ import kwok
 from kwok.net.requset_context import RequestContext
 from kwok.protocol.rpc_model import VersionJsonRpcReq, VersionJsonRpcResp
 
-
 class VersionHandler:
+    """Version request handler, handles client version‑query RPC requests,
+    triggered by CLI command `kwok version`.
+    """
 
     async def __call__(
             self, params: Any, ctx: RequestContext | None = None

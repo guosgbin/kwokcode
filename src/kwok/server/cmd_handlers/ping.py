@@ -12,6 +12,14 @@ from kwok.protocol.rpc_model import PingJsonRpcReq, PingJsonRpcResp
 
 
 class PingHandler:
+    """RPC ping health‑check handler.
+
+    Responds to client ping requests for server liveness detection.
+    Returns server version, running uptime and the request receiving timestamp.
+
+    Args:
+        get_start_time: Callable returning the server start monotonic timestamp.
+    """
 
     def __init__(self, get_start_time: Callable[[], float]) -> None:
         self._get_start_time = get_start_time
